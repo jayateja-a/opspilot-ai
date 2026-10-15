@@ -1,0 +1,88 @@
+name: opspilot-ai
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opspilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-opspilot}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-opspilot}
+      POSTGRES_USER: ${POSTGRES_USER:-opspilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot-local-only}
+      AGENT_URL: http://agent:8000
+      API_TOKEN: ${API_TOKEN:-local-demo-token}
+      AGENT_TOKEN: ${AGENT_TOKEN:-local-agent-token}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; cat <&3 | grep -q UP'",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+  agent:
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    environment: &agent_env
+      DATABASE_DSN: postgresql://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot-local-only}@postgres:5432/${POSTGRES_DB:-opspilot}
+      AGENT_TOKEN: ${AGENT_TOKEN:-local-agent-token}
+      AI_MODE: ${AI_MODE:-demo}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 60
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      API_TOKEN: ${API_TOKEN:-local-demo-token}
+      NGINX_ENVSUBST_FILTER: ^API_TOKEN$
+    ports: ["127.0.0.1:3000:80"]
+    depends_on:
+      agent: { condition: service_healthy }
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    environment:
+      <<: *agent_env
+      API_BASE: http://backend:8080/api
+      AGENT_BASE: http://agent:8000
+      API_TOKEN: ${API_TOKEN:-local-demo-token}
+      RUN_INTEGRATION: "1"
+    depends_on:
+      agent: { condition: service_healthy }
+    command: ["python", "-m", "pytest", "-q", "tests", "e2e"]
+volumes:
+  postgres_data:

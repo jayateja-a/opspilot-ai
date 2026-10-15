@@ -1,0 +1,22 @@
+server:
+  port: ${PORT:8080}
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/opspilot}
+    username: ${POSTGRES_USER:opspilot}
+    password: ${POSTGRES_PASSWORD:opspilot-local-only}
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+opspilot:
+  agent-url: ${AGENT_URL:http://localhost:8000}
+  api-token: ${API_TOKEN:local-demo-token}
+  agent-token: ${AGENT_TOKEN:local-agent-token}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
