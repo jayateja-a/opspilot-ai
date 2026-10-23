@@ -35,7 +35,7 @@ class LabClientTest {
     server.start();
     try {
       String url = "http://127.0.0.1:" + server.getAddress().getPort();
-      LabClient client = new LabClient(url, url, "test-token", new ObjectMapper());
+      LabClient client = new LabClient(url, url, url, "test-token", new ObjectMapper());
 
       client.activateAndRead("db-pool");
 

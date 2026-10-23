@@ -78,5 +78,21 @@
     "content": "Upstream rate limiting. Symptoms: Upstream HTTP 429; Retry-After=30; immediate retries increase traffic. Diagnosis: Immediate retries amplify upstream rate limiting. Procedure: Honor Retry-After with bounded exponential backoff and jitter; avoid retry storms. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
     "action": "enable_backoff",
     "risk": "LOW"
+  },
+  {
+    "id": "rb-commerce-db-pool",
+    "service": "checkout-service",
+    "title": "Diagnose checkout database pool saturation",
+    "content": "E-commerce checkout connection pool exhaustion under generated traffic. Evidence: measured database active connections approach pool size, waiters increase, checkout connection acquisition timeouts appear in service logs, and checkout latency or error rate rises. Confirm the checkout database pool budget against PostgreSQL capacity and inspect query duration before increasing the limit. Reduce connection hold time or tune the bounded pool only after validating database headroom. Verify waiters and checkout errors fall. Roll back the pool setting if database saturation worsens.",
+    "action": "tune_pool",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-queue-backlog",
+    "service": "checkout-service",
+    "title": "Diagnose order worker backlog",
+    "content": "E-commerce order queue backlog under generated storefront traffic. Evidence: measured pending order queue grows while processed order count stalls and storefront requests continue. Check worker health and downstream inventory latency. Restore worker availability or add bounded consumer capacity after checking idempotency and downstream limits. Verify backlog drains and order completion catches up. Roll back added consumers if downstream saturation increases.",
+    "action": "scale_consumers",
+    "risk": "MEDIUM"
   }
 ]

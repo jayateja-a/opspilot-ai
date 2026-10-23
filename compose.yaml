@@ -43,6 +43,89 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+  commerce-inventory:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      ROLE: inventory
+    expose:
+      - "8081"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  commerce-checkout:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      ROLE: checkout
+      INVENTORY_URL: http://commerce-inventory:8081
+      LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
+      DB_POOL_SIZE: ${COMMERCE_DB_POOL_SIZE:-3}
+    expose:
+      - "8081"
+    depends_on:
+      commerce-inventory:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  commerce-storefront:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      ROLE: storefront
+      CHECKOUT_URL: http://commerce-checkout:8081
+    expose:
+      - "8081"
+    depends_on:
+      commerce-checkout:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  commerce-controller:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      ROLE: controller
+      LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
+      CHECKOUT_URL: http://commerce-checkout:8081
+      STOREFRONT_URL: http://commerce-storefront:8081
+      INVENTORY_URL: http://commerce-inventory:8081
+    expose:
+      - "8081"
+    depends_on:
+      commerce-storefront:
+        condition: service_healthy
+      commerce-load-generator:
+        condition: service_started
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  commerce-load-generator:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      ROLE: loadgen
+      STOREFRONT_URL: http://commerce-storefront:8081
+      TRAFFIC_INTERVAL_SECONDS: ${COMMERCE_TRAFFIC_INTERVAL_SECONDS:-0.12}
+      TRAFFIC_USERS: ${COMMERCE_TRAFFIC_USERS:-12}
+    depends_on:
+      commerce-storefront:
+        condition: service_healthy
   backend:
     build:
       context: .
@@ -59,6 +142,7 @@ services:
       LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
       FINTECH_LAB_URL: http://fintech-lab:8081
       HEALTHCARE_LAB_URL: http://healthcare-lab:8081
+      COMMERCE_LAB_URL: http://commerce-controller:8081
     ports:
       - 127.0.0.1:8080:8080
     depends_on:
@@ -67,6 +151,8 @@ services:
       fintech-lab:
         condition: service_healthy
       healthcare-lab:
+        condition: service_healthy
+      commerce-controller:
         condition: service_healthy
     healthcheck:
       test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; cat <&3 | grep -q UP'"]
@@ -101,7 +187,9 @@ services:
         condition: service_healthy
       healthcare-lab:
         condition: service_healthy
-    command: [pytest, -q, lab/test_lab.py, scripts/e2e_test.py]
+      commerce-controller:
+        condition: service_healthy
+    command: [pytest, -q, lab/test_lab.py, lab/test_commerce.py, scripts/e2e_test.py]
   load:
     profiles: [load]
     image: grafana/k6:0.54.0

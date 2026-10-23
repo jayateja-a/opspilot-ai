@@ -79,7 +79,18 @@ public class AgentClient {
     if(scenario!=null){var telemetry=lab.activateAndRead(sid);evidence.add(Map.of("id","logs:1","type","logs","source",telemetry.get("domain"),"data",telemetry.get("logs")));evidence.add(Map.of("id","metrics:1","type","metrics","source",telemetry.get("domain"),"data",telemetry.get("metrics")));calls.add(Map.of("tool","read_lab_logs","status","ok"));calls.add(Map.of("tool","read_lab_metrics","status","ok"));}
     var citations=db.queryForList("SELECT c.id AS chunk_id,c.runbook_id,r.title,c.content,1-(c.embedding <=> ?) AS score FROM runbook_chunks c JOIN runbooks r ON r.id=c.runbook_id WHERE r.service=? AND c.embedding_model=? ORDER BY c.embedding <=> ?,c.id LIMIT 3",pgvector(embed(description+" "+evidence)),service,embeddingModel,pgvector(embed(description+" "+evidence)));
     calls.add(Map.of("tool","retrieve_runbooks","status","ok","count",citations.size()));
-    boolean supported=scenario!=null&&citations.stream().anyMatch(c->Objects.equals(c.get("runbook_id"),scenario.get("expected_runbook")));
+    boolean matchingRunbook=scenario!=null&&citations.stream().anyMatch(c->Objects.equals(c.get("runbook_id"),scenario.get("expected_runbook")));
+    Map<String,Object> observedMetrics=Map.of();
+    for(var item:evidence) if("metrics".equals(item.get("type"))&&item.get("data") instanceof Map<?,?> data) {
+      var values=new LinkedHashMap<String,Object>();data.forEach((k,v)->values.put(Objects.toString(k),v));observedMetrics=values;
+    }
+    boolean commerceSignal=switch(sid) {
+      case "commerce-db-pool" -> number(observedMetrics.get("database_pool_size"))>0 &&
+          (number(observedMetrics.get("checkout_error_rate"))>0 || number(observedMetrics.get("database_waiters"))>0);
+      case "commerce-queue-backlog" -> number(observedMetrics.get("queue_backlog"))>0;
+      default -> true;
+    };
+    boolean supported=matchingRunbook&&commerceSignal;
     String cause="Insufficient evidence to identify a root cause."; String reasoning="Collect telemetry and a matching runbook before proposing an executable action."; double confidence=0;
     List<String>warnings=new ArrayList<>(List.of("Container telemetry and remediation are synthetic lab data."));
     if(supported){
@@ -89,7 +100,18 @@ public class AgentClient {
         Set<String> evidenceIds=new HashSet<>();evidence.forEach(e->evidenceIds.add((String)e.get("id")));Set<String> bookIds=new HashSet<>();citations.forEach(c->bookIds.add(Objects.toString(c.get("runbook_id"))));
         if(response==null||response.evidence_ids().isEmpty()||!evidenceIds.containsAll(response.evidence_ids())||!bookIds.containsAll(response.runbook_ids()))throw new IllegalStateException("Ungrounded model response");
         cause=response.root_cause();reasoning=response.reasoning();confidence=response.confidence();
-      } else {cause=Objects.toString(scenario.get("root_cause"));reasoning="The synthetic telemetry matches the retrieved procedure. Demo reasoning is deterministic, not an LLM diagnosis.";confidence=.9;warnings.add("Demo confidence is a fixture score, not a calibrated probability.");}
+      } else {
+        cause=Objects.toString(scenario.get("root_cause"));
+        reasoning=switch(sid) {
+          case "commerce-db-pool" -> "Observed checkout error rate="+observedMetrics.getOrDefault("checkout_error_rate",0)+
+              ", database pool size="+observedMetrics.getOrDefault("database_pool_size",0)+
+              ", waiters="+observedMetrics.getOrDefault("database_waiters",0)+" during generated storefront traffic; retrieved runbook matches these measurements. Demo reasoning is deterministic, not an LLM diagnosis.";
+          case "commerce-queue-backlog" -> "Observed order queue backlog="+observedMetrics.getOrDefault("queue_backlog",0)+
+              " and processed total="+observedMetrics.getOrDefault("queue_processed_total",0)+" while storefront traffic continued; retrieved runbook matches these measurements. Demo reasoning is deterministic, not an LLM diagnosis.";
+          default -> "The synthetic telemetry matches the retrieved procedure. Demo reasoning is deterministic, not an LLM diagnosis.";
+        };
+        confidence=sid.startsWith("commerce-")?.84:.9;warnings.add("Demo confidence is a fixture score, not a calibrated probability.");
+      }
     }
     var rec=Map.<String,Object>of("action",supported?scenario.get("action"):"manual_review","risk",supported?scenario.get("risk"):"HIGH","executable",supported,"human_approval_required",true,"explanation",supported?"Review evidence, change impact, and rollback before approval.":"No execution is allowed without sufficient evidence.");
     var result=new LinkedHashMap<String,Object>();
@@ -119,5 +141,6 @@ public class AgentClient {
   private float[] embed(String text){if(mode.equals("openai")){var model=embeddings.getIfAvailable();if(model==null)throw new IllegalStateException("Spring AI embedding model unavailable");float[] v=model.embed(text);if(v.length!=DIMENSIONS)throw new IllegalStateException("Expected 1536 embedding dimensions");return v;}float[] v=new float[DIMENSIONS];var m=WORD.matcher(text.toLowerCase(Locale.ROOT));while(m.find()){byte[] h;try{h=MessageDigest.getInstance("SHA-256").digest(m.group().getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new IllegalStateException(e);}int i=Math.floorMod(java.nio.ByteBuffer.wrap(h).getInt(),DIMENSIONS);v[i]++;}double n=0;for(float x:v)n+=x*x;if(n>0)for(int i=0;i<v.length;i++)v[i]/=(float)Math.sqrt(n);return v;}
   private PGobject pgvector(float[] v){try{PGobject o=new PGobject();o.setType("vector");o.setValue(Arrays.toString(v));return o;}catch(Exception e){throw new IllegalStateException(e);}}
   private List<String> chunks(String text,int size){return chunks(text);}
+  private double number(Object value){return value instanceof Number n?n.doubleValue():0;}
   private String sha(String s){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
 }

@@ -9,7 +9,7 @@ All `/api/*` routes require `Authorization: Bearer <API_TOKEN>`. The local front
 | POST | `/api/incidents/{id}/analyze` | Collect lab telemetry, retrieve runbooks, propose diagnosis and RCA |
 | POST | `/api/incidents/{id}/approval` | Persist `APPROVE` or `REJECT` with reviewer and note |
 | POST | `/api/incidents/{id}/execute` | Run allowlisted simulation only after persisted approval; idempotent after resolution |
-| GET | `/api/scenarios` | Ten synthetic scenario summaries |
+| GET | `/api/scenarios` | Twelve synthetic scenario summaries |
 | GET/POST | `/api/runbooks` | List and ingest custom runbook content for retrieval |
 | GET | `/api/configuration-items` | Local fintech and healthcare CI inventory |
 | GET/POST | `/api/problems` | List and create Problem records; optional linked incident |

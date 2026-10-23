@@ -8,7 +8,8 @@ OpsPilot is a local operations workspace for investigating synthetic service inc
 - **Spring AI** — optional OpenAI chat and embedding providers. `AI_MODE=demo` is deterministic and makes no external AI calls.
 - **PostgreSQL + pgvector** — incidents, ticket numbers, configuration items, problem/change records, approvals, RCA history, runbooks, and vectors.
 - **React + TypeScript** — light operations dashboard with ticket priority, evidence, RCA/fix path diagrams, approval UI, and audit timeline.
-- **Fintech and healthcare lab containers** — synthetic API traffic, logs, metrics, and allowlisted fault scenarios. They are isolated local test services; they are not real customer data or production systems.
+- **Fintech and healthcare lab containers** — synthetic APIs and allowlisted domain faults.
+- **E-commerce lab cluster** — generated shoppers call a storefront, checkout, and inventory service. Checkout measures request errors/latency, a bounded connection pool, and a background order queue; a telemetry controller gathers service logs and metrics.
 
 All remediation remains a simulation. The application cannot access AWS, Kubernetes, host Docker, or external customer infrastructure.
 
@@ -49,7 +50,9 @@ Spring AI 1.1.x is used with Spring Boot 3.5.x. RAG uses Spring AI's `EmbeddingM
 
 ## Synthetic scenarios
 
-The 10 cases cover database pool saturation, release regression, memory pressure, CPU saturation, disk pressure, Redis outage, Kafka lag, TLS expiry, DNS failure, and rate limiting. Fintech and healthcare lab containers accept only scenarios assigned to their domain. They serve synthetic endpoints (`/payments` and `/fhir/Patient`) and synthetic telemetry; injected faults never touch host or external infrastructure.
+The original 10 cases cover database pool saturation, release regression, memory pressure, CPU saturation, disk pressure, Redis outage, Kafka lag, TLS expiry, DNS failure, and rate limiting. Two e-commerce cases add a measured checkout database-pool failure and a growing order-worker queue. By default, 12 synthetic shoppers generate continuous traffic; configure this with `COMMERCE_TRAFFIC_USERS` and `COMMERCE_TRAFFIC_INTERVAL_SECONDS`.
+
+E-commerce requests follow storefront → checkout → inventory. The pool fault holds a small bounded pool long enough for concurrent shoppers to observe acquisition timeouts. The queue fault pauses the background worker so pending orders rise while traffic continues. Investigation reads per-service logs and measured request/error/latency, pool, and queue metrics; the diagnosis is withheld unless runtime signals and a matching runbook are present. These containers and their in-memory order/queue state are local synthetic workloads, not production systems or a real PostgreSQL-backed commerce app. Faults and remediation never touch external infrastructure.
 
 ## Test coverage
 
@@ -65,9 +68,9 @@ A CI run is the authoritative full-stack gate. The exact tests run locally depen
 | Path | Responsibility |
 |---|---|
 | `backend/` | Spring Boot API, Spring AI, Flyway migrations, tests |
-| `lab/` | Synthetic domain workload and telemetry containers plus lab tests |
+| `lab/` | Synthetic domain workloads, cooperating commerce services, telemetry controller, and lab tests |
 | `frontend/` | Light React operations dashboard |
-| `fixtures/` | 10 scenario definitions and local runbooks |
+| `fixtures/` | 12 scenario definitions and local runbooks |
 | `scripts/` | Local start/stop, Compose integration, smoke and load helpers |
 | `docs/` | Product, architecture, safety, design, task plan, and decision memory |
 

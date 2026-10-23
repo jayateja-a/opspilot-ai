@@ -11,7 +11,7 @@ flowchart TD
   API --> AI["Spring AI provider, optional"]
 ```
 
-Compose starts PostgreSQL, two isolated synthetic lab containers, Spring Boot, and the frontend. The test profile runs lab unit tests and black-box API regression tests against the same stack.
+Compose starts PostgreSQL, two isolated fintech/healthcare labs, a cooperating e-commerce cluster (storefront, checkout, inventory, traffic generator, telemetry/fault controller), Spring Boot, and the frontend. The test profile runs lab tests plus black-box API regressions against the same stack.
 
 ## Investigation flow
 
@@ -40,9 +40,10 @@ sequenceDiagram
 | `Api.java` | Bearer-protected incidents, runbooks, configuration items, problem/change records, and RCA review |
 | `IncidentService` | Incident state machine, ticket metadata, orchestration, approval checks, simulation, audit, RCA draft creation |
 | `AgentClient` | Spring AI adapter, deterministic embeddings/diagnosis, OpenAI embeddings/chat, pgvector SQL search, allowlisted simulated outcomes |
-| `LabClient` | Select lab by scenario domain, activate only allowlisted faults, fetch synthetic telemetry |
+| `LabClient` | Select lab by scenario, activate only allowlisted faults, fetch collected telemetry |
 | `ItsmService` | CI inventory, linked problem/change records, guarded change transitions, RCA review and RAG promotion |
 | `lab/app.py` | Synthetic HTTP workload, fault controls, logs, metrics, domain endpoints |
+| `lab/commerce_lab.py` | E-commerce storefront, checkout, inventory, background order worker, traffic generator, and telemetry/fault controller (`ROLE`) |
 | PostgreSQL/Flyway | Ticket and workflow records, JSON evidence, audit, runbooks and 1536-dimension vector chunks |
 | React | Light dashboard for queue, report, evidence, approval/rejection, runbooks and audit history |
 
@@ -55,4 +56,4 @@ Runbooks are split into overlapping chunks stored with embedding model identifie
 The browser uses the local Spring API through the frontend proxy. API requests use a local bearer token. Fault-control requests use a separate token and scenario allowlists. Lab containers have no Docker socket or host mount. The external AI provider is contacted only in `openai` mode.
 
 ## Limitations
-The lab is synthetic and fixture-driven, not a production-like financial/healthcare application. Lab fault state is singleton and intended for a single-user local demo. ITIL fields/workflows are a lightweight local model, not every ITIL practice or a certified ITSM integration.
+The e-commerce cluster generates HTTP traffic through storefront → checkout → inventory. Checkout uses an in-process bounded semaphore as a simulated database connection pool and an in-memory order queue/worker. Pool exhaustion and worker-pause faults create service errors/backlog; each service records request/error/latency metrics and bounded logs, which the controller aggregates. The incident layer requires observed pool or backlog signals plus a matching runbook before it supports these diagnoses. These remain local synthetic processes, not a real database-backed commerce system or production monitoring integration. The other ten domain cases remain fixture-driven. Lab fault state is singleton and intended for a single-user local demo. ITIL fields/workflows are a lightweight local model, not every ITIL practice or a certified ITSM integration.

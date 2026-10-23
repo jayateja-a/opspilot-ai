@@ -15,3 +15,5 @@ OpsPilot is a local-only incident investigation MVP using Spring Boot + Spring A
 
 ## Limits
 The isolated lab has no Docker socket, host mounts, or real customer data. Fault controls are token-protected and domain-allowlisted. Lab fault state is single-user demo state. Production requires separately designed identity, isolation, integrations, secret management, retention, and infrastructure safeguards.
+
+The local e-commerce workload has cooperating storefront, checkout, and inventory processes plus a 12-user generator. Checkout measures an in-memory bounded connection pool and order queue; telemetry comes from those requests. `commerce-db-pool` and `commerce-queue-backlog` diagnoses require observed signals and their respective retrieved runbooks. Other domain scenarios remain fixture-driven.

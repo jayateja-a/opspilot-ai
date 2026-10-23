@@ -6,7 +6,7 @@ import httpx, pytest
 pytestmark = pytest.mark.skipif(os.getenv("RUN_INTEGRATION") != "1", reason="Compose integration profile sets RUN_INTEGRATION=1")
 BASE=os.getenv("API_BASE","http://127.0.0.1:8080/api")
 TOKEN=os.getenv("API_TOKEN","local-demo-token")
-SCENARIOS=["db-pool","bad-release","oom","cpu","disk","redis","kafka","certificate","dns","rate-limit"]
+SCENARIOS=["db-pool","bad-release","oom","cpu","disk","redis","kafka","certificate","dns","rate-limit","commerce-db-pool","commerce-queue-backlog"]
 def call(method,path,body=None,expected=200):
     r=httpx.request(method,BASE+path,headers={"Authorization":"Bearer "+TOKEN},json=body,timeout=90,trust_env=False)
     assert r.status_code==expected,f"{method} {path}: {r.status_code} {r.text}"
@@ -27,6 +27,15 @@ def test_itil_incident_investigation_approval_simulation_and_rca(sid):
     assert a["recommendation"]["executable"] and a["recommendation"]["human_approval_required"]
     assert any(c["runbook_id"]=="rb-"+sid for c in a["citations"])
     assert len(a["evidence"])==2 and a["causal_graph"]["nodes"] and a["fix_graph"]["nodes"]
+    if sid == "commerce-db-pool":
+        observed=a["evidence"][1]["data"]
+        assert observed["database_pool_size"] > 0
+        assert observed["checkout_error_rate"] > 0 or observed["database_waiters"] > 0
+        assert "generated storefront traffic" in a["reasoning"]
+    if sid == "commerce-queue-backlog":
+        observed=a["evidence"][1]["data"]
+        assert observed["queue_backlog"] > 0
+        assert "Observed order queue backlog" in a["reasoning"]
     assert i["rcaDocuments"] and i["rcaDocuments"][0]["status"]=="DRAFT"
     call("POST",f"/incidents/{iid}/analyze",{},409)
     i=call("POST",f"/incidents/{iid}/approval",{"decision":"APPROVE","reviewer":"e2e-operator","note":"Reviewed synthetic telemetry, impact, and rollback."})

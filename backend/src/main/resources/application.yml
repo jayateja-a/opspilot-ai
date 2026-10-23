@@ -26,6 +26,7 @@ opspilot:
     token: ${LAB_TOKEN:local-lab-token}
     fintech-url: ${FINTECH_LAB_URL:http://localhost:8081}
     healthcare-url: ${HEALTHCARE_LAB_URL:http://localhost:8082}
+    commerce-url: ${COMMERCE_LAB_URL:http://localhost:8083}
 management:
   endpoints:
     web:

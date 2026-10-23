@@ -4,7 +4,8 @@
 - [x] Spring Boot API, local bearer protection, and Flyway schema.
 - [x] Spring AI provider adapter with deterministic demo mode and optional OpenAI chat/embeddings.
 - [x] PostgreSQL/pgvector runbook chunking and retrieval.
-- [x] Ten synthetic incident scenarios.
+- [x] Ten synthetic fintech/healthcare incident scenarios.
+- [x] Cooperating e-commerce storefront, checkout, inventory, continuous traffic generator, measured logs/metrics, pool-exhaustion, and order-queue backlog faults.
 - [x] Isolated fintech and healthcare workload containers with allowlisted faults, logs, metrics, and endpoints.
 - [x] ITIL-inspired incident number, impact, urgency, derived priority, CI, and major-incident marker.
 - [x] Human approve/reject, allowlisted simulation, audit, and idempotent execution.
@@ -15,7 +16,7 @@
 - [x] Product, architecture, safety, design, task, and memory docs.
 
 ## Next engineering phase
-1. Replace scenario fixtures with configurable workload generators and event streams while retaining safe defaults.
+1. Replace remaining fintech/healthcare scenario fixtures with configurable workloads and event streams while retaining safe defaults.
 2. Add CI relationship/dependency maps and cross-service impact propagation.
 3. Add OpenTelemetry/Prometheus and ticketing adapters behind explicit configuration.
 4. Add role identity, reviewer separation, tenant isolation, secret management, and audit retention before shared deployment.

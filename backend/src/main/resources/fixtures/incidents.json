@@ -5,7 +5,9 @@
     "title": "Database pool exhaustion",
     "severity": "P1",
     "description": "Database pool exhaustion in payment-service. Investigate and propose a safe action.",
-    "logs": ["HikariPool connection timeout; active=20 pending=84"],
+    "logs": [
+      "HikariPool connection timeout; active=20 pending=84"
+    ],
     "metrics": {
       "db_active": 20,
       "pool_size": 20
@@ -21,7 +23,9 @@
     "title": "Errors after a deployment",
     "severity": "P1",
     "description": "Errors after a deployment in checkout-service. Investigate and propose a safe action.",
-    "logs": ["HTTP 500 after release v2; previous v1 was healthy"],
+    "logs": [
+      "HTTP 500 after release v2; previous v1 was healthy"
+    ],
     "metrics": {
       "error_rate": 0.38,
       "deployment_version": 2
@@ -37,7 +41,9 @@
     "title": "Memory pressure and restarts",
     "severity": "P2",
     "description": "Memory pressure and restarts in catalog-service. Investigate and propose a safe action.",
-    "logs": ["OOMKilled; heap reached container memory limit"],
+    "logs": [
+      "OOMKilled; heap reached container memory limit"
+    ],
     "metrics": {
       "memory_percent": 98,
       "restart_count": 7
@@ -53,7 +59,9 @@
     "title": "CPU saturation",
     "severity": "P2",
     "description": "CPU saturation in search-service. Investigate and propose a safe action.",
-    "logs": ["CPU throttling; request queue growing"],
+    "logs": [
+      "CPU throttling; request queue growing"
+    ],
     "metrics": {
       "cpu_percent": 96,
       "replicas": 2
@@ -69,7 +77,9 @@
     "title": "Disk nearly full",
     "severity": "P2",
     "description": "Disk nearly full in report-service. Investigate and propose a safe action.",
-    "logs": ["No space left on device; archived logs consume disk"],
+    "logs": [
+      "No space left on device; archived logs consume disk"
+    ],
     "metrics": {
       "disk_percent": 97,
       "archive_gb": 24
@@ -85,7 +95,9 @@
     "title": "Redis connection failure",
     "severity": "P1",
     "description": "Redis connection failure in session-service. Investigate and propose a safe action.",
-    "logs": ["Redis connection refused; endpoint health check failed"],
+    "logs": [
+      "Redis connection refused; endpoint health check failed"
+    ],
     "metrics": {
       "cache_error_rate": 0.91,
       "redis_available": 0
@@ -101,7 +113,9 @@
     "title": "Consumer lag growth",
     "severity": "P2",
     "description": "Consumer lag growth in event-service. Investigate and propose a safe action.",
-    "logs": ["Consumer processing slow; lag increases with incoming events"],
+    "logs": [
+      "Consumer processing slow; lag increases with incoming events"
+    ],
     "metrics": {
       "consumer_lag": 50000,
       "consumers": 2
@@ -117,7 +131,9 @@
     "title": "Expired TLS certificate",
     "severity": "P1",
     "description": "Expired TLS certificate in gateway-service. Investigate and propose a safe action.",
-    "logs": ["TLS certificate has expired; handshake fails"],
+    "logs": [
+      "TLS certificate has expired; handshake fails"
+    ],
     "metrics": {
       "tls_failures": 320,
       "certificate_days_remaining": -1
@@ -133,7 +149,9 @@
     "title": "DNS resolution errors",
     "severity": "P2",
     "description": "DNS resolution errors in notification-service. Investigate and propose a safe action.",
-    "logs": ["NXDOMAIN while resolving dependency; cached stale DNS entry"],
+    "logs": [
+      "NXDOMAIN while resolving dependency; cached stale DNS entry"
+    ],
     "metrics": {
       "dns_failures": 140,
       "dns_ttl_seconds": 3600
@@ -160,5 +178,31 @@
     "action": "enable_backoff",
     "risk": "LOW",
     "expected_runbook": "rb-rate-limit"
+  },
+  {
+    "id": "commerce-db-pool",
+    "service": "checkout-service",
+    "title": "E-commerce checkout database pool exhaustion",
+    "severity": "P1",
+    "description": "Live synthetic storefront traffic causes checkout database connection pool exhaustion. Inspect checkout error rate, database active connections, waiters, and measured request latency.",
+    "logs": [],
+    "metrics": {},
+    "root_cause": "Checkout database connection pool saturated under generated order traffic; connection acquisition timeouts cause checkout failures.",
+    "action": "tune_pool",
+    "risk": "MEDIUM",
+    "expected_runbook": "rb-commerce-db-pool"
+  },
+  {
+    "id": "commerce-queue-backlog",
+    "service": "checkout-service",
+    "title": "E-commerce order processing queue backlog",
+    "severity": "P2",
+    "description": "Generated storefront traffic exceeds checkout order worker throughput. Inspect measured pending queue depth, processed order count, request volume, and service logs.",
+    "logs": [],
+    "metrics": {},
+    "root_cause": "Checkout background worker is paused, so order events accumulate faster than they can be processed.",
+    "action": "scale_consumers",
+    "risk": "MEDIUM",
+    "expected_runbook": "rb-commerce-queue-backlog"
   }
 ]
