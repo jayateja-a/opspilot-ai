@@ -316,6 +316,7 @@ export default function App() {
                               className={tab === t ? "active" : ""}
                               onClick={() => setTab(t)}
                             >
+                              {t === "analysis" ? <Radar size={15} /> : t === "evidence" ? <BookOpen size={15} /> : <Activity size={15} />}
                               {t}
                             </button>
                           ),
@@ -348,8 +349,7 @@ export default function App() {
                                 Investigate incident
                               </button>
                               <small>
-                                Logs + metrics → runbook retrieval →
-                                recommendation
+                                This activates the selected fault in a local synthetic service. OpsPilot reads its generated logs and metrics, then retrieves related runbooks. It does not monitor live production traffic.
                               </small>
                             </div>
                           ) : (
