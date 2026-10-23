@@ -49,6 +49,7 @@ services:
       dockerfile: lab/Dockerfile
     environment:
       ROLE: inventory
+    command: [python, /app/commerce_lab.py]
     expose:
       - "8081"
     healthcheck:
@@ -65,6 +66,7 @@ services:
       INVENTORY_URL: http://commerce-inventory:8081
       LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
       DB_POOL_SIZE: ${COMMERCE_DB_POOL_SIZE:-3}
+    command: [python, /app/commerce_lab.py]
     expose:
       - "8081"
     depends_on:
@@ -82,6 +84,7 @@ services:
     environment:
       ROLE: storefront
       CHECKOUT_URL: http://commerce-checkout:8081
+    command: [python, /app/commerce_lab.py]
     expose:
       - "8081"
     depends_on:
@@ -102,6 +105,7 @@ services:
       CHECKOUT_URL: http://commerce-checkout:8081
       STOREFRONT_URL: http://commerce-storefront:8081
       INVENTORY_URL: http://commerce-inventory:8081
+    command: [python, /app/commerce_lab.py]
     expose:
       - "8081"
     depends_on:
@@ -123,6 +127,7 @@ services:
       STOREFRONT_URL: http://commerce-storefront:8081
       TRAFFIC_INTERVAL_SECONDS: ${COMMERCE_TRAFFIC_INTERVAL_SECONDS:-0.12}
       TRAFFIC_USERS: ${COMMERCE_TRAFFIC_USERS:-12}
+    command: [python, /app/commerce_lab.py]
     depends_on:
       commerce-storefront:
         condition: service_healthy
