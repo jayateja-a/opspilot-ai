@@ -3,14 +3,19 @@ package ai.opspilot;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class IncidentService {
+  private static final Logger log = LoggerFactory.getLogger(IncidentService.class);
   private final JdbcTemplate db;
   private final ObjectMapper json;
   private final AgentClient agent;
@@ -162,11 +167,15 @@ public class IncidentService {
           || !(analysis.get("citations") instanceof List<?>))
         throw new IllegalStateException("Invalid agent contract");
     } catch (Exception e) {
+      String diagnostic = analysisFailureMessage(e);
+      // Keep the full cause in the backend log for diagnosis. Never return provider or
+      // infrastructure exception details (which can contain internal URLs) to the UI.
+      log.error("Incident {} investigation failed: {}", id, diagnostic, e);
       db.update(
-          "UPDATE incidents SET status='ANALYSIS_FAILED',last_error='AI service unavailable or"
-              + " invalid response',updated_at=now() WHERE id=?",
+          "UPDATE incidents SET status='ANALYSIS_FAILED',last_error=?,updated_at=now() WHERE id=?",
+          diagnostic,
           id);
-      event(id, "ANALYSIS_FAILED", Map.of("retryable", true));
+      event(id, "ANALYSIS_FAILED", Map.of("retryable", true, "diagnostic", diagnostic));
       return get(id);
     }
     db.update(
@@ -180,6 +189,22 @@ public class IncidentService {
     db.update("INSERT INTO rca_documents(id,incident_id,status,title,body) VALUES (?,?, 'DRAFT', ?, ?::jsonb)", UUID.randomUUID(), id, "RCA: " + r.get("title"), encode(rcaBody));
     event(id, "RCA_DRAFT_CREATED", Map.of("source", "incident_analysis"));
     return get(id);
+  }
+
+  static String analysisFailureMessage(Throwable failure) {
+    for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+      if (cause instanceof RestClientException) {
+        return "Could not read the synthetic service lab. Check that both lab containers are healthy and LAB_TOKEN matches.";
+      }
+      if (cause instanceof DataAccessException || cause instanceof java.sql.SQLException) {
+        return "Runbook retrieval failed. Check PostgreSQL health, Flyway migrations, and the pgvector extension.";
+      }
+      String type = cause.getClass().getName();
+      if (type.startsWith("org.springframework.ai.")) {
+        return "The configured AI provider failed. Check AI_MODE and, when using OpenAI mode, the API key and model access.";
+      }
+    }
+    return "Investigation failed. Check the backend logs for the underlying cause, then retry analysis.";
   }
 
   @Transactional
