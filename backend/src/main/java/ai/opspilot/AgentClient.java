@@ -46,7 +46,9 @@ public class AgentClient {
   @jakarta.annotation.PostConstruct
   public void seedRunbooks() { for (var book:books) {
     var existing=db.queryForList("SELECT id FROM runbook_chunks WHERE runbook_id=? AND embedding_model=? LIMIT 1",book.get("id"),embeddingModel);
-    if(existing.isEmpty()) ingest(book);
+    // Built-in fixtures use reserved rb-* IDs. Seed them through the persistence path;
+    // ingest() is the public/user-submitted path and must reject those reserved IDs.
+    if(existing.isEmpty()) saveBook(book);
   }}
 
   public Object scenarios() { return scenarios.stream().map(s->{var r=new LinkedHashMap<String,Object>(); for(String k:List.of("id","service","title","severity","description"))r.put(k,s.get(k));return r;}).toList(); }
