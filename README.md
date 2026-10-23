@@ -1,175 +1,74 @@
-# OpsPilot AI
+# OpsPilot AI — Local Incident Investigation MVP
 
-A local incident investigation workspace built with **Java 17 / Spring Boot**, **FastAPI**, **React / TypeScript**, **PostgreSQL / pgvector**, and Docker Compose.
+OpsPilot is a local operations workspace for investigating synthetic service incidents. It connects incident/ticket records to container telemetry and runbooks, prepares an evidence-backed diagnosis and remediation proposal, and requires a human decision before running an allowlisted simulation.
 
-Create an incident → collect simulated logs and metrics → retrieve runbook chunks → analyze → review and approve → execute a bounded simulation → inspect verification and audit history.
+## What runs locally
 
-## AI development handoff
+- **Spring Boot / Java 17** — REST API, ITIL-style incident records, retrieval and workflow orchestration, approval/rejection, audit events, RCA records, and simulated action verification.
+- **Spring AI** — optional OpenAI chat and embedding providers. `AI_MODE=demo` is deterministic and makes no external AI calls.
+- **PostgreSQL + pgvector** — incidents, ticket numbers, configuration items, problem/change records, approvals, RCA history, runbooks, and vectors.
+- **React + TypeScript** — light operations dashboard with ticket priority, evidence, RCA/fix path diagrams, approval UI, and audit timeline.
+- **Fintech and healthcare lab containers** — synthetic API traffic, logs, metrics, and allowlisted fault scenarios. They are isolated local test services; they are not real customer data or production systems.
 
-Start a coding session with [docs/memory.md](docs/memory.md), then [docs/rules.md](docs/rules.md). Read only the relevant specification sections and source files for the assigned task; the other documents are references, not a mandatory full-context bundle.
+All remediation remains a simulation. The application cannot access AWS, Kubernetes, host Docker, or external customer infrastructure.
 
-| Document | Purpose |
-| --- | --- |
-| [docs/PRD.md](docs/PRD.md) | What is being built, why, users, scope, and acceptance conditions |
-| [docs/architecture.md](docs/architecture.md) | End-to-end flow, ownership, contracts, source locations, and failure boundaries |
-| [docs/rules.md](docs/rules.md) | Application AI limits and coding-assistant working rules |
-| [docs/Design.md](docs/Design.md) | Visual direction, screens, interactions, responsive behavior, and UI constraints |
-| [docs/Tasks.md](docs/Tasks.md) | Completed build sequence, open validation, and explicitly proposed future work |
-| [docs/memory.md](docs/memory.md) | Short project checkpoint, decisions, resolved issues, and dated verification |
+## Start the local workspace
 
-Suggested session instruction: "Read docs/memory.md and docs/rules.md first. For this task, load only the relevant spec sections and code. Preserve the Local MVP scope, implement the requested change, run relevant checks, and update affected docs with actual results."
-
-These are ordinary Markdown files. Tell a new coding tool to read them; automatic loading depends on that tool. They reduce duplicated context through selective reading, not a guaranteed token reduction.
-
-## Start in Docker
-
-Install Docker Desktop (Windows/macOS) or Docker Engine with the Compose v2 plugin (Linux). Allow roughly 4 GB memory and several GB of disk for the first build. No OpenAI key is needed in demo mode.
+Requirements: Docker Engine/Desktop with Docker Compose v2, and about 4 GB available RAM for the first image build.
 
 ```bash
 cp .env.example .env
-docker compose up --build -d --wait --wait-timeout 300
+docker compose up --build --wait
 ```
 
-On Windows PowerShell, use `Copy-Item .env.example .env` for the first command. Run all commands from this repository's root.
+Open [http://localhost:3000](http://localhost:3000). The API and OpenAPI UI are at [http://localhost:8080](http://localhost:8080) and [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html). Default tokens in `.env.example` are for local development only.
 
-- **Dashboard:** http://localhost:3000
-- **Backend Swagger:** http://localhost:8080/swagger-ui/index.html — click Authorize and enter `local-demo-token` (or your `API_TOKEN`).
-- **Backend health:** http://localhost:8080/actuator/health
-- **PostgreSQL:** localhost:5432; defaults are in `.env.example`.
-- The AI service runs on the internal Compose network at `agent:8000`.
-
-Alternatively, on Linux/macOS: `bash scripts/start.sh`.
-
-### Try the complete product
-
-1. Open the dashboard and click **New incident**.
-2. Select **Database pool exhaustion** and create it.
-3. Click **Investigate incident**.
-4. Inspect the hypothesis and **Evidence** tab, including runbook citations.
-5. Enter your name and a decision note, then click **Approve plan**.
-6. Click **Execute simulation**. Inspect before/after metrics and the **Activity** audit trail.
-7. Try rejecting a different recommendation. Its action cannot execute.
-8. Open **Runbook library** to ingest a custom procedure. Built-in `rb-` identifiers are reserved.
-
-Each of the ten sample scenarios has simulated evidence, a matching runbook, a risk level, and a deterministic verified outcome. Instances you create remain in the PostgreSQL volume across restarts.
-
-## Verify
+To run the full black-box regression suite against the containers and database:
 
 ```bash
-bash scripts/verify.sh
-```
-
-Or on any platform:
-
-```bash
-docker compose up --build -d --wait --wait-timeout 300
 docker compose --profile test run --build --rm tests
 ```
 
-Backend and frontend tests run during their image builds. The test container runs Python unit tests and HTTP/database integration tests against the live services. It creates test incidents; it does not erase existing data.
+To stop the lab and preserve its database, run `docker compose down`. To remove the local database volume too, run `docker compose down -v`.
 
-Native commands, when you have Java 17+, Maven 3.9+, Python 3.12+, Node 22+, and a running PostgreSQL instance with pgvector:
+## Optional OpenAI provider
 
-```bash
-cd backend
-mvn verify
-cd ../ai-service
-python -m venv .venv
-# Linux/macOS: source .venv/bin/activate
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pytest -q
-cd ../frontend
-npm ci
-npm run build
-npm test
-```
+Demo mode is the default and supports the complete workflow without network credentials. For provider-backed diagnosis and embeddings, set `AI_MODE=openai` and `OPENAI_API_KEY` in `.env`, then restart the backend. OpenAI usage may incur charges. Model output is constrained to supplied evidence and runbooks, and its cited evidence identifiers are validated before a proposal is accepted. The deterministic mode is suitable for repeatable tests and demos.
 
-For native development, first start the database with `docker compose up -d postgres`. Start the backend with `mvn spring-boot:run` in `backend/` (this applies Flyway migrations). Start `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000` in `ai-service/`. Then run `npm run dev` in `frontend/` and open http://localhost:5173. Use a separate terminal for each. Default native credentials match `.env.example`; changed settings must be exported into each terminal because Maven, Vite, and the agent do not automatically read the root `.env`.
+Spring AI 1.1.x is used with Spring Boot 3.5.x. RAG uses Spring AI's `EmbeddingModel` and `ChatClient` abstractions while PostgreSQL/pgvector storage and similarity search remain explicit SQL so the retrieval schema and filtering are visible.
 
-To run integration tests natively against those services, from the repository root:
+## Workflow
 
-```bash
-RUN_INTEGRATION=1 python -m pytest -v scripts/e2e_test.py
-```
+1. Choose a scenario or create an incident. An ITIL-style `INC-` ticket number, impact, urgency, priority, category, and affected CI are stored.
+2. Investigate. The backend activates only a named lab fault, reads the selected lab's synthetic telemetry, and retrieves matching runbook chunks from pgvector.
+3. Review root-cause hypothesis, evidence, retrieved procedures, cause/fix diagrams, risk, and resolution type.
+4. Approve or reject. Rejection blocks execution. Approval is persisted and audited.
+5. Run the allowlisted local simulation and verify synthetic before/after metrics.
+6. Review the generated RCA. An approved RCA summary is added to the retrieval library as reference material. This is RAG knowledge reuse, not model training.
+7. Create linked Problem and Change records for recurring causes or proposed durable changes. Change progression is explicit and gated through assessment/authorization/review.
 
-On PowerShell, set `$env:RUN_INTEGRATION="1"` first, then run the Python command. The AI unit tests require `PYTHONPATH=ai-service` when invoked from the repository root.
+## Synthetic scenarios
 
-### Optional browser smoke test
+The 10 cases cover database pool saturation, release regression, memory pressure, CPU saturation, disk pressure, Redis outage, Kafka lag, TLS expiry, DNS failure, and rate limiting. Fintech and healthcare lab containers accept only scenarios assigned to their domain. They serve synthetic endpoints (`/payments` and `/fhir/Patient`) and synthetic telemetry; injected faults never touch host or external infrastructure.
 
-With the stack running, install Playwright locally and verify the product through Chromium:
+## Test coverage
 
-```bash
-cd frontend
-npm install --no-save playwright
-npx playwright install chromium
-cd ..
-node scripts/browser_smoke.mjs
-```
+- Java unit and MVC tests: `cd backend && mvn test`.
+- Frontend component tests and production build: `cd frontend && npm ci && npm test && npm run build`.
+- Lab service unit tests plus API/database/pgvector end-to-end regression tests: the Compose `test` profile.
+- CI builds and starts the complete Compose stack, runs the integration profile, and tears down its database volume.
 
-This creates and resolves one simulated incident, checks the evidence and audit views, checks a 390-pixel mobile viewport for overflow, and writes screenshots into `docs/`. Set `UI_URL` if you changed the dashboard port.
+A CI run is the authoritative full-stack gate. The exact tests run locally depend on whether Maven, Node dependencies, and Docker are installed.
 
-## Demo mode and OpenAI mode
+## Repository map
 
-**Demo mode** uses a deterministic token-hashing vectorizer (1536 dimensions), real pgvector cosine retrieval, rule-based scenario diagnosis, and mock telemetry/remediation. It is fully offline after dependencies/images have downloaded. The demo's fixed 0.90 score is a fixture score, not a calibrated confidence probability. The application labels this clearly.
+| Path | Responsibility |
+|---|---|
+| `backend/` | Spring Boot API, Spring AI, Flyway migrations, tests |
+| `lab/` | Synthetic domain workload and telemetry containers plus lab tests |
+| `frontend/` | Light React operations dashboard |
+| `fixtures/` | 10 scenario definitions and local runbooks |
+| `scripts/` | Local start/stop, Compose integration, smoke and load helpers |
+| `docs/` | Product, architecture, safety, design, task plan, and decision memory |
 
-**OpenAI mode** replaces the vectorizer with OpenAI embeddings and the diagnosis text with schema-validated LLM reasoning grounded in supplied evidence and runbook references. Tools, risk levels, and approved actions remain constrained by the same trusted scenario allowlist. This is a fixed investigation pipeline; it does not implement autonomous planning, LangGraph, MCP, or real Kubernetes operations.
-
-In `.env`, set:
-
-```dotenv
-AI_MODE=openai
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=gpt-4.1-mini
-EMBEDDING_MODEL=text-embedding-3-small
-```
-
-Then run `docker compose up -d --force-recreate agent`. This makes paid API calls to OpenAI for ten seed runbook embeddings on the first start and for subsequent analysis/retrieval/ingestion. An unavailable or invalid LLM response fails the analysis; no executable result is silently substituted. This optional live provider path was tested with mocked HTTP responses, not a real API key.
-
-Embeddings are tagged by model and retrieval filters by that tag. Switching modes reindexes built-in runbooks at startup. Reingest your custom runbooks after switching modes or models. An embedding model must support 1536 dimensions and the configured reasoning model must support JSON schema responses.
-
-## API example
-
-```bash
-curl -X POST http://localhost:8080/api/incidents \
-  -H 'Authorization: Bearer local-demo-token' \
-  -H 'Content-Type: application/json' \
-  -d '{"service":"payment-service","title":"Database pool exhaustion","description":"Payment API latency is rising","severity":"P1","scenarioId":"db-pool"}'
-```
-
-Use the returned `id`:
-
-```bash
-curl -X POST http://localhost:8080/api/incidents/INCIDENT_ID/analyze -H 'Authorization: Bearer local-demo-token'
-curl -X POST http://localhost:8080/api/incidents/INCIDENT_ID/approval \
-  -H 'Authorization: Bearer local-demo-token' -H 'Content-Type: application/json' \
-  -d '{"decision":"APPROVE","reviewer":"Local operator","note":"Reviewed logs, capacity, and rollback plan."}'
-curl -X POST http://localhost:8080/api/incidents/INCIDENT_ID/execute -H 'Authorization: Bearer local-demo-token'
-```
-
-Incidents without `scenarioId` are supported by the API; without telemetry they produce a non-executable insufficient-evidence result. The dashboard creation dialog focuses on the ten reproducible scenarios.
-
-## Repository
-
-| Directory | Responsibility |
-| --- | --- |
-| `backend/` | Incident APIs, Flyway migrations, approval state machine, persisted audit/receipts, OpenAPI |
-| `ai-service/app/` | Retrieval, embeddings, structured reasoning, evidence tools, approval verification, simulation |
-| `frontend/` | Responsive incident workspace, decision form, citations, audit trail, runbook ingestion |
-| `fixtures/` | Ten reproducible incidents and matching runbooks |
-| `scripts/` | Start/stop/verification and full workflow integration tests |
-| `docs/` | Architecture, API/state contract, troubleshooting and verification evidence |
-
-## Boundaries
-
-This is a localhost MVP. Host ports bind to `127.0.0.1`. The browser uses a local Nginx/Vite proxy that supplies the backend token; it is not a production login system. Reviewer names are operator-entered audit labels, not independently authenticated identities. The internal agent checks a service token and persisted approvals. Never expose these local demo proxies publicly.
-
-All remediation is a simulation. No shell commands, cloud writes, or Kubernetes writes are executed. A resolved status means the simulation met its expected outcome; it does not mean a real service recovered. There are no AWS or Kubernetes production resources in this repository.
-
-The control plane locks an incident row during each transition. External agent calls inside transitions are bounded by timeouts; this is acceptable at local MVP scale but should move to durable jobs/outbox processing before high-volume deployment. Repeated execution returns the saved receipt; concurrent execution produces one audit event. The simulation also returns a stable receipt after a lost response. That does not establish exactly-once semantics for future real tools.
-
-## Stop and troubleshoot
-
-`docker compose down` stops the stack and keeps data. `docker compose logs -f backend agent` shows service logs. If a port is occupied, stop its existing service or change only the host side of the Compose port mapping.
-
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), [docs/architecture.md](docs/architecture.md), and [docs/VERIFICATION.md](docs/VERIFICATION.md).
+See `docs/architecture.md` for flow and storage, `docs/rules.md` for AI/action boundaries, and `docs/Tasks.md` for remaining product work.

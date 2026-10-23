@@ -1,0 +1,164 @@
+[
+  {
+    "id": "db-pool",
+    "service": "payment-service",
+    "title": "Database pool exhaustion",
+    "severity": "P1",
+    "description": "Database pool exhaustion in payment-service. Investigate and propose a safe action.",
+    "logs": ["HikariPool connection timeout; active=20 pending=84"],
+    "metrics": {
+      "db_active": 20,
+      "pool_size": 20
+    },
+    "root_cause": "Bounded connection pool exhausted; inspect slow queries before changing capacity.",
+    "action": "tune_pool",
+    "risk": "MEDIUM",
+    "expected_runbook": "rb-db-pool"
+  },
+  {
+    "id": "bad-release",
+    "service": "checkout-service",
+    "title": "Errors after a deployment",
+    "severity": "P1",
+    "description": "Errors after a deployment in checkout-service. Investigate and propose a safe action.",
+    "logs": ["HTTP 500 after release v2; previous v1 was healthy"],
+    "metrics": {
+      "error_rate": 0.38,
+      "deployment_version": 2
+    },
+    "root_cause": "Deployment regression correlates with increased server errors.",
+    "action": "rollback_deployment",
+    "risk": "HIGH",
+    "expected_runbook": "rb-bad-release"
+  },
+  {
+    "id": "oom",
+    "service": "catalog-service",
+    "title": "Memory pressure and restarts",
+    "severity": "P2",
+    "description": "Memory pressure and restarts in catalog-service. Investigate and propose a safe action.",
+    "logs": ["OOMKilled; heap reached container memory limit"],
+    "metrics": {
+      "memory_percent": 98,
+      "restart_count": 7
+    },
+    "root_cause": "Container memory limit exceeded; heap growth needs investigation.",
+    "action": "increase_memory",
+    "risk": "MEDIUM",
+    "expected_runbook": "rb-oom"
+  },
+  {
+    "id": "cpu",
+    "service": "search-service",
+    "title": "CPU saturation",
+    "severity": "P2",
+    "description": "CPU saturation in search-service. Investigate and propose a safe action.",
+    "logs": ["CPU throttling; request queue growing"],
+    "metrics": {
+      "cpu_percent": 96,
+      "replicas": 2
+    },
+    "root_cause": "CPU saturation is causing queueing under load.",
+    "action": "scale_deployment",
+    "risk": "MEDIUM",
+    "expected_runbook": "rb-cpu"
+  },
+  {
+    "id": "disk",
+    "service": "report-service",
+    "title": "Disk nearly full",
+    "severity": "P2",
+    "description": "Disk nearly full in report-service. Investigate and propose a safe action.",
+    "logs": ["No space left on device; archived logs consume disk"],
+    "metrics": {
+      "disk_percent": 97,
+      "archive_gb": 24
+    },
+    "root_cause": "Archived logs are exhausting disk capacity.",
+    "action": "clean_archives",
+    "risk": "HIGH",
+    "expected_runbook": "rb-disk"
+  },
+  {
+    "id": "redis",
+    "service": "session-service",
+    "title": "Redis connection failure",
+    "severity": "P1",
+    "description": "Redis connection failure in session-service. Investigate and propose a safe action.",
+    "logs": ["Redis connection refused; endpoint health check failed"],
+    "metrics": {
+      "cache_error_rate": 0.91,
+      "redis_available": 0
+    },
+    "root_cause": "Cache endpoint is unavailable; session requests fail.",
+    "action": "reconnect_cache",
+    "risk": "LOW",
+    "expected_runbook": "rb-redis"
+  },
+  {
+    "id": "kafka",
+    "service": "event-service",
+    "title": "Consumer lag growth",
+    "severity": "P2",
+    "description": "Consumer lag growth in event-service. Investigate and propose a safe action.",
+    "logs": ["Consumer processing slow; lag increases with incoming events"],
+    "metrics": {
+      "consumer_lag": 50000,
+      "consumers": 2
+    },
+    "root_cause": "Consumer throughput is lower than event ingress.",
+    "action": "scale_consumers",
+    "risk": "MEDIUM",
+    "expected_runbook": "rb-kafka"
+  },
+  {
+    "id": "certificate",
+    "service": "gateway-service",
+    "title": "Expired TLS certificate",
+    "severity": "P1",
+    "description": "Expired TLS certificate in gateway-service. Investigate and propose a safe action.",
+    "logs": ["TLS certificate has expired; handshake fails"],
+    "metrics": {
+      "tls_failures": 320,
+      "certificate_days_remaining": -1
+    },
+    "root_cause": "Expired certificate is causing TLS handshake failures.",
+    "action": "renew_certificate",
+    "risk": "HIGH",
+    "expected_runbook": "rb-certificate"
+  },
+  {
+    "id": "dns",
+    "service": "notification-service",
+    "title": "DNS resolution errors",
+    "severity": "P2",
+    "description": "DNS resolution errors in notification-service. Investigate and propose a safe action.",
+    "logs": ["NXDOMAIN while resolving dependency; cached stale DNS entry"],
+    "metrics": {
+      "dns_failures": 140,
+      "dns_ttl_seconds": 3600
+    },
+    "root_cause": "Stale DNS cache is preventing dependency resolution.",
+    "action": "refresh_dns",
+    "risk": "LOW",
+    "expected_runbook": "rb-dns"
+  },
+  {
+    "id": "rate-limit",
+    "service": "integration-service",
+    "title": "Upstream rate limiting",
+    "severity": "P2",
+    "description": "Upstream rate limiting in integration-service. Investigate and propose a safe action.",
+    "logs": [
+      "Upstream HTTP 429; Retry-After=30; immediate retries increase traffic"
+    ],
+    "metrics": {
+      "upstream_429": 230,
+      "retry_delay_seconds": 0
+    },
+    "root_cause": "Immediate retries amplify upstream rate limiting.",
+    "action": "enable_backoff",
+    "risk": "LOW",
+    "expected_runbook": "rb-rate-limit"
+  }
+]

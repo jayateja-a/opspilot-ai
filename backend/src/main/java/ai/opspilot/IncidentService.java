@@ -76,6 +76,7 @@ public class IncidentService {
             .map(this::convert)
             .findFirst()
             .orElse(null));
+    r.put("rcaDocuments", db.queryForList("SELECT * FROM rca_documents WHERE incident_id=? ORDER BY created_at DESC", id).stream().map(this::convert).toList());
     return r;
   }
 
@@ -97,6 +98,9 @@ public class IncidentService {
   public Map<String, Object> create(Api.Create request) {
     UUID id = UUID.randomUUID();
     String scenario = request.scenarioId();
+    String impact=Objects.toString(request.impact(),request.severity().equals("P1")?"HIGH":request.severity().equals("P2")?"HIGH":"MEDIUM");
+    String urgency=Objects.toString(request.urgency(),request.severity().equals("P1")?"HIGH":request.severity().equals("P2")?"MEDIUM":"MEDIUM");
+    String priority=PriorityPolicy.derive(impact,urgency);
     if (scenario != null) {
       Object raw = agent.scenarios();
       if (!(raw instanceof List<?> items))
@@ -116,14 +120,22 @@ public class IncidentService {
         request.service(),
         request.service());
     db.update(
-        "INSERT INTO incidents(id,service,title,description,severity,scenario_id) VALUES"
-            + " (?,?,?,?,?,?)",
+        "INSERT INTO incidents(id,service,title,description,severity,scenario_id,impact,urgency,priority,category,affected_ci,major_incident,reported_by,source_channel) VALUES"
+            + " (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         id,
         request.service(),
         request.title(),
         request.description(),
         request.severity(),
-        scenario);
+        scenario,
+        impact,
+        urgency,
+        priority,
+        Objects.toString(request.category(),"APPLICATION").toUpperCase(Locale.ROOT),
+        Objects.toString(request.affectedCi(),request.service()),
+        priority.equals("P1"),
+        Objects.toString(request.reportedBy(),"Local operator"),
+        Objects.toString(request.sourceChannel(),"OPS PILOT"));
     event(id, "INCIDENT_CREATED", Map.of("simulation", true));
     return get(id);
   }
@@ -164,6 +176,9 @@ public class IncidentService {
         encode(analysis),
         id);
     event(id, "ANALYSIS_COMPLETED", Map.of("mode", analysis.get("mode")));
+    var rcaBody = Map.<String,Object>of("summary", analysis.get("root_cause"), "reasoning", analysis.get("reasoning"), "evidence", analysis.get("evidence"), "citations", analysis.get("citations"), "causal_graph", analysis.get("causal_graph"), "fix_graph", analysis.get("fix_graph"), "resolution_type", analysis.get("resolution_type"), "resolution_horizon", analysis.get("resolution_horizon"), "follow_up", "Review evidence and validate the simulated outcome before accepting this RCA.");
+    db.update("INSERT INTO rca_documents(id,incident_id,status,title,body) VALUES (?,?, 'DRAFT', ?, ?::jsonb)", UUID.randomUUID(), id, "RCA: " + r.get("title"), encode(rcaBody));
+    event(id, "RCA_DRAFT_CREATED", Map.of("source", "incident_analysis"));
     return get(id);
   }
 

@@ -24,12 +24,19 @@ import {
   type Runbook,
 } from "./api";
 const readable = (s: string) => s.replaceAll("_", " ").toLowerCase();
+function ReportGraph({title, graph}:{title:string;graph?:{nodes:{id:string;label:string}[];edges:{from:string;to:string}[]}}) {
+  if (!graph?.nodes?.length) return null;
+  return <section className="report-graph" aria-label={title}><div className="eyebrow">{title}</div><div className="graph-flow">{graph.nodes.map((n,idx)=><div className="graph-step" key={n.id}><div className="graph-node"><small>{idx===0?"SIGNAL":idx===graph.nodes.length-1?"OUTCOME":"CAUSE"}</small><strong>{n.label}</strong></div>{idx<graph.nodes.length-1&&<span className="graph-arrow" aria-hidden="true">→</span>}</div>)}</div></section>;
+}
 export default function App() {
   const [incidents, setIncidents] = useState<Incident[]>([]),
     [scenarios, setScenarios] = useState<Scenario[]>([]),
-    [books, setBooks] = useState<Runbook[]>([]);
+    [books, setBooks] = useState<Runbook[]>([]),
+    [problems,setProblems]=useState<Record<string,any>[]>([]),
+    [changes,setChanges]=useState<Record<string,any>[]>([]),
+    [cis,setCis]=useState<Record<string,any>[]>([]);
   const [selected, setSelected] = useState<Incident | null>(null),
-    [page, setPage] = useState<"incidents" | "runbooks">("incidents");
+    [page, setPage] = useState<"incidents" | "runbooks" | "itsm">("incidents");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [createOpen, setCreateOpen] = useState(false),
@@ -40,15 +47,20 @@ export default function App() {
   const [bookTitle, setBookTitle] = useState(""),
     [bookService, setBookService] = useState("payment-service"),
     [bookContent, setBookContent] = useState("");
+  const [problemTitle,setProblemTitle]=useState(""),[changeTitle,setChangeTitle]=useState("");
   async function load() {
-    const [i, s, b] = await Promise.all([
+    const [i, s, b, pr, ch, ci] = await Promise.all([
       api<Incident[]>("/incidents"),
       api<Scenario[]>("/scenarios"),
       api<Runbook[]>("/runbooks"),
+      api<Record<string,any>[]>("/problems"),
+      api<Record<string,any>[]>("/changes"),
+      api<Record<string,any>[]>("/configuration-items"),
     ]);
     setIncidents(i);
     setScenarios(s);
     setBooks(b);
+    setProblems(pr);setChanges(ch);setCis(ci);
     return i;
   }
   useEffect(() => {
@@ -98,6 +110,17 @@ export default function App() {
       await load();
     });
   }
+  async function reviewRca() {
+    if (!selected) return;
+    const draft=selected.rcaDocuments?.find((r)=>r.status==="DRAFT");
+    if (!draft) return;
+    await work(async()=>{
+      await api(`/rca/${draft.id}/review`,{approve:true,reviewer});
+      setSelected(await api<Incident>(`/incidents/${selected.id}`));
+      await load();
+    });
+  }
+  async function advanceChange(id:string,status:string){await work(async()=>{await api(`/changes/${id}/transition`,{status,reviewer});await load();});}
   const a = selected?.analysis;
   const resolved = incidents.filter((x) => x.status === "RESOLVED").length;
   const pending = incidents.filter(
@@ -122,6 +145,9 @@ export default function App() {
           >
             <Activity size={18} />
             Incidents<span>{incidents.length}</span>
+          </button>
+          <button className={page === "itsm" ? "active" : ""} onClick={() => setPage("itsm")}>
+            <ClipboardCheck size={18} /> ITSM records<span>{problems.length+changes.length}</span>
           </button>
           <button
             className={page === "runbooks" ? "active" : ""}
@@ -150,7 +176,7 @@ export default function App() {
           <span>
             Workspace <ChevronRight size={14} />
             <b>
-              {page === "incidents" ? "Incident operations" : "Runbook library"}
+              {page === "incidents" ? "Incident operations" : page === "runbooks" ? "Runbook library" : "ITSM records"}
             </b>
           </span>
           <span className="environment">
@@ -160,17 +186,13 @@ export default function App() {
         <div className="content">
           <div className="heading">
             <div className="eyebrow">
-              OPERATIONS / {page === "incidents" ? "OVERVIEW" : "KNOWLEDGE"}
+              OPERATIONS / {page === "incidents" ? "OVERVIEW" : page === "runbooks" ? "KNOWLEDGE" : "SERVICE MANAGEMENT"}
             </div>
             <h1>
-              {page === "incidents"
-                ? "A clearer path to resolution."
-                : "Your operational knowledge."}
+              {page === "incidents" ? "A clearer path to resolution." : page === "runbooks" ? "Your operational knowledge." : "Keep service records connected."}
             </h1>
             <p>
-              {page === "incidents"
-                ? "Investigate with evidence. Review the plan. Stay in control."
-                : "Versioned procedures, retrieved with PostgreSQL + pgvector."}
+              {page === "incidents" ? "Investigate with evidence. Review the plan. Stay in control." : page === "runbooks" ? "Versioned procedures, retrieved with PostgreSQL + pgvector." : "Configuration items, recurring problems, and governed changes."}
             </p>
             {page === "incidents" && (
               <button
@@ -276,7 +298,7 @@ export default function App() {
                           </span>
                           <h2>{selected.title}</h2>
                           <p>
-                            {selected.service} <span>·</span>{" "}
+                            {selected.ticket_number} <span>·</span> Priority {selected.priority} <span>·</span> Impact {selected.impact} / urgency {selected.urgency} <span>·</span> {selected.service} <span>·</span>{" "}
                             {selected.severity}
                           </p>
                         </div>
@@ -353,6 +375,9 @@ export default function App() {
                                 <h3>{a.root_cause}</h3>
                                 <p>{a.reasoning}</p>
                               </div>
+                              <div className="resolution-label"><span>Resolution horizon</span><strong>{readable(a.resolution_horizon ?? "unclassified")}</strong><small>Proposal classification from the approved scenario; confirm durability during change review.</small></div>
+                              <ReportGraph title="Cause and impact path" graph={a.causal_graph}/>
+                              <ReportGraph title="Proposed recovery path" graph={a.fix_graph}/>
                               <div className="recommendation">
                                 <div className="panel-heading">
                                   <h3>
@@ -454,6 +479,7 @@ export default function App() {
                                   Recommendation rejected. No action executed.
                                 </div>
                               )}
+                              {selected.rcaDocuments?.some((r)=>r.status==="DRAFT") && <div className="rca-review"><strong>RCA draft saved for review</strong><p>Approve it to add the reviewed summary to the runbook retrieval library for future investigations.</p><button className="secondary" disabled={busy} onClick={()=>void reviewRca()}>Approve RCA for reference</button></div>}
                               {selected.execution && (
                                 <div className="execution-result">
                                   <h3>
@@ -574,7 +600,7 @@ export default function App() {
                 </section>
               </div>
             </>
-          ) : (
+          ) : page === "runbooks" ? (
             <div className="books-grid">
               <section className="panel book-list">
                 <div className="panel-heading">
@@ -651,6 +677,30 @@ export default function App() {
                   Ingest runbook
                 </button>
               </form>
+            </div>
+          ) : (
+            <div className="itsm-grid">
+              <section className="panel book-list">
+                <div className="panel-heading"><h2>Configuration items</h2><span>{cis.length} local CIs</span></div>
+                {cis.map((ci)=><div className="record-row" key={ci.id}><div><strong>{ci.name}</strong><small>{ci.id} · {ci.ci_type} · {ci.domain}</small></div><span className="status">{readable(ci.health)}</span></div>)}
+              </section>
+              <section className="panel book-list">
+                <div className="panel-heading"><h2>Problems</h2><span>{problems.length} records</span></div>
+                {problems.map((p)=><div className="record-row" key={p.id}><div><strong>{p.ticket_number} · {p.title}</strong><small>{p.status} · {p.owner_group}</small><p>{p.description}</p></div></div>)}
+                {!problems.length&&<p className="empty-note">No problem records yet.</p>}
+                <form className="record-form" onSubmit={(e)=>{e.preventDefault();void work(async()=>{await api("/problems",{title:problemTitle,description:"Recurring issue linked to the active local investigation",rootCause:"Under investigation",workaround:"Follow the incident runbook",incidentId:selected?.id??null});setProblemTitle("");await load();});}}>
+                  <label>New problem record<input required value={problemTitle} onChange={(e)=>setProblemTitle(e.target.value)} maxLength={160} placeholder="Recurring cause to investigate"/></label><button className="secondary" disabled={busy}>Create Problem</button>
+                </form>
+              </section>
+              <section className="panel book-list">
+                <div className="panel-heading"><h2>Changes</h2><span>{changes.length} records</span></div>
+                {changes.map((c)=><div className="record-row" key={c.id}><div><strong>{c.ticket_number} · {c.title}</strong><small>{c.status} · {c.change_type} · {c.risk} risk</small><p>{c.description}</p></div>{({DRAFT:"ASSESSMENT",ASSESSMENT:"AUTHORIZED",AUTHORIZED:"SCHEDULED",SCHEDULED:"IMPLEMENTING",IMPLEMENTING:"REVIEW",REVIEW:"CLOSED"} as Record<string,string>)[c.status]&&<button className="secondary compact" disabled={busy} onClick={()=>void advanceChange(c.id,({DRAFT:"ASSESSMENT",ASSESSMENT:"AUTHORIZED",AUTHORIZED:"SCHEDULED",SCHEDULED:"IMPLEMENTING",IMPLEMENTING:"REVIEW",REVIEW:"CLOSED"} as Record<string,string>)[c.status])}>Advance to {readable(({DRAFT:"ASSESSMENT",ASSESSMENT:"AUTHORIZED",AUTHORIZED:"SCHEDULED",SCHEDULED:"IMPLEMENTING",IMPLEMENTING:"REVIEW",REVIEW:"CLOSED"} as Record<string,string>)[c.status])}</button>}</div>)}
+                {!changes.length&&<p className="empty-note">No change records yet.</p>}
+                <form className="record-form" onSubmit={(e)=>{e.preventDefault();void work(async()=>{await api("/changes",{title:changeTitle,description:"Proposed service remediation; linked to the selected incident when present",changeType:"NORMAL",risk:"MEDIUM",impact:"MEDIUM",implementationPlan:"Apply the reviewed change in the local simulation, then verify service health",rollbackPlan:"Restore the previous configuration and verify recovery",incidentId:selected?.id??null});setChangeTitle("");await load();});}}>
+                  <label>New change request<input required value={changeTitle} onChange={(e)=>setChangeTitle(e.target.value)} maxLength={160} placeholder="Proposed corrective change"/></label><button className="primary" disabled={busy}>Create Change</button>
+                </form>
+              </section>
+              <p className="fineprint">These records model ITIL-inspired local workflows. They do not connect to an external service desk or implement real infrastructure changes.</p>
             </div>
           )}
           <footer className="footer">

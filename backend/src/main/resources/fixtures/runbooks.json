@@ -1,0 +1,82 @@
+[
+  {
+    "id": "rb-db-pool",
+    "service": "payment-service",
+    "title": "Database pool exhaustion",
+    "content": "Database pool exhaustion. Symptoms: HikariPool connection timeout; active=20 pending=84. Diagnosis: Bounded connection pool exhausted; inspect slow queries before changing capacity. Procedure: Verify PostgreSQL headroom and slow query duration. Increase pool only within the database connection budget. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "tune_pool",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-bad-release",
+    "service": "checkout-service",
+    "title": "Errors after a deployment",
+    "content": "Errors after a deployment. Symptoms: HTTP 500 after release v2; previous v1 was healthy. Diagnosis: Deployment regression correlates with increased server errors. Procedure: Compare release versions, confirm rollback compatibility and restore the previous release. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "rollback_deployment",
+    "risk": "HIGH"
+  },
+  {
+    "id": "rb-oom",
+    "service": "catalog-service",
+    "title": "Memory pressure and restarts",
+    "content": "Memory pressure and restarts. Symptoms: OOMKilled; heap reached container memory limit. Diagnosis: Container memory limit exceeded; heap growth needs investigation. Procedure: Inspect heap and memory leak evidence; apply a bounded memory adjustment and monitor restarts. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "increase_memory",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-cpu",
+    "service": "search-service",
+    "title": "CPU saturation",
+    "content": "CPU saturation. Symptoms: CPU throttling; request queue growing. Diagnosis: CPU saturation is causing queueing under load. Procedure: Confirm load and downstream capacity, increase replicas by one, then inspect CPU and latency. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "scale_deployment",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-disk",
+    "service": "report-service",
+    "title": "Disk nearly full",
+    "content": "Disk nearly full. Symptoms: No space left on device; archived logs consume disk. Diagnosis: Archived logs are exhausting disk capacity. Procedure: Confirm retention policy and backups; remove only simulated expired archives. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "clean_archives",
+    "risk": "HIGH"
+  },
+  {
+    "id": "rb-redis",
+    "service": "session-service",
+    "title": "Redis connection failure",
+    "content": "Redis connection failure. Symptoms: Redis connection refused; endpoint health check failed. Diagnosis: Cache endpoint is unavailable; session requests fail. Procedure: Verify endpoint availability and perform a bounded reconnect with backoff. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "reconnect_cache",
+    "risk": "LOW"
+  },
+  {
+    "id": "rb-kafka",
+    "service": "event-service",
+    "title": "Consumer lag growth",
+    "content": "Consumer lag growth. Symptoms: Consumer processing slow; lag increases with incoming events. Diagnosis: Consumer throughput is lower than event ingress. Procedure: Check partitions and processing errors before adding one consumer. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "scale_consumers",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-certificate",
+    "service": "gateway-service",
+    "title": "Expired TLS certificate",
+    "content": "Expired TLS certificate. Symptoms: TLS certificate has expired; handshake fails. Diagnosis: Expired certificate is causing TLS handshake failures. Procedure: Confirm hostname and certificate chain; simulate certificate renewal and verify handshake. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "renew_certificate",
+    "risk": "HIGH"
+  },
+  {
+    "id": "rb-dns",
+    "service": "notification-service",
+    "title": "DNS resolution errors",
+    "content": "DNS resolution errors. Symptoms: NXDOMAIN while resolving dependency; cached stale DNS entry. Diagnosis: Stale DNS cache is preventing dependency resolution. Procedure: Compare authoritative DNS results; refresh the simulated local DNS cache. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "refresh_dns",
+    "risk": "LOW"
+  },
+  {
+    "id": "rb-rate-limit",
+    "service": "integration-service",
+    "title": "Upstream rate limiting",
+    "content": "Upstream rate limiting. Symptoms: Upstream HTTP 429; Retry-After=30; immediate retries increase traffic. Diagnosis: Immediate retries amplify upstream rate limiting. Procedure: Honor Retry-After with bounded exponential backoff and jitter; avoid retry storms. Verification: confirm errors and saturation decrease. Rollback: restore the previous simulated configuration.",
+    "action": "enable_backoff",
+    "risk": "LOW"
+  }
+]

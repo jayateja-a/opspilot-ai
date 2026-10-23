@@ -1,25 +1,13 @@
-# Verification — 2026-10-07
+# Verification Guide
 
-The local MVP was built and exercised against running services. **42 automated tests passed**, plus a real Chromium browser workflow.
+| Area | Command | Coverage |
+|---|---|---|
+| Spring Boot | `cd backend && mvn test` | Unit and MVC API contract tests |
+| React | `cd frontend && npm ci && npm test && npm run build` | Component regressions and TypeScript production build |
+| Lab | `python -m pytest -q lab/test_lab.py` | Domain allowlists, authentication, synthetic faults |
+| Full stack | `docker compose --profile test run --build --rm tests` after `docker compose up --build --wait` | Lab tests plus API/database/pgvector black-box regressions, including all ten scenarios |
+| CI | `.github/workflows/ci.yml` | Clean Compose build, full regression suite, teardown |
 
-| Check | Result |
-| --- | --- |
-| Java 17 / Spring Boot Maven verify | 6 tests passed; executable JAR built |
-| Python / FastAPI unit tests | 19 passed |
-| HTTP/database integration tests | 15 passed against Spring Boot + FastAPI + PostgreSQL 16.15 + pgvector 0.8.1 |
-| React / TypeScript build and Vitest | Production bundle built; 2 tests passed |
-| Browser workflow | Create → investigate → view evidence → approve → execute → inspect audit passed |
-| Mobile viewport | 390 × 844; no horizontal document overflow |
-| Desktop viewport | 1440 × 1080; inspected screenshot |
-| Compose and shell configuration | YAML parsed; shell syntax checked |
+The integration suite checks ticket metadata, all scenario workflows, approval/rejection, insufficient evidence, idempotent simulation, audit history, vector retrieval, Problem/Change records, transition guards, CI inventory, and API validation/authentication.
 
-The integration suite covers all ten scenarios, execution before approval, repeated execution, concurrent duplicate execution, rejection, forged approval IDs, missing telemetry, unauthorized API access, invalid payloads, unknown incidents, mismatched services, runbook replacement, and service-filtered pgvector retrieval. Unit tests also cover provider failures, retrieval failures, invented citation IDs, and embedding dimension mismatches.
-
-OpenAI requests were tested using mocked HTTP responses. No real API key or paid provider call was used. Docker was not installed in the build environment, so the full workflow ran natively; Docker images and Compose startup were not executed here. PostgreSQL and pgvector were used directly, not replaced with SQLite or an in-memory mock.
-
-Screenshots from the running production React bundle:
-
-- [Desktop workspace](dashboard-desktop.png)
-- [Mobile workspace](dashboard-mobile.png)
-
-Run `scripts/verify.sh` to repeat the API/database tests with Docker locally. The optional `scripts/browser_smoke.mjs` repeats the browser flow with a locally installed Playwright browser. A Starlette HTTPX compatibility deprecation warning appeared in Python tests; it did not fail any tests.
+This suite provides regression confidence, not a claim of 100% code coverage. Coverage should be measured in provisioned CI and expanded against meaningful branches; coverage alone does not establish correctness.

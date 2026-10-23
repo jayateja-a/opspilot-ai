@@ -1,57 +1,32 @@
-# Product requirements — OpsPilot AI
+# OpsPilot AI — Product Requirements
 
-Status: implemented Local MVP. Updated: 2026-10-15.
+## What we are building
+OpsPilot is a local incident investigation and workflow-automation workspace. It collects synthetic service telemetry, retrieves relevant runbooks, assembles a traceable diagnosis, presents a remediation proposal for human review, and records the decision and simulated outcome.
 
-## Product and purpose
+## Why
+Support engineers spend time switching among alerts, metrics, procedures, tickets, and change records. OpsPilot demonstrates how evidence retrieval and constrained AI can reduce investigation time while keeping the engineer accountable for diagnosis and action.
 
-OpsPilot AI is an incident investigation and workflow automation workspace built with Java/Spring Boot, Python/FastAPI, PostgreSQL/pgvector, and React. It connects incident records, operational procedures, evidence, diagnosis text, human decisions, and simulated remediation in one auditable workflow.
+## Users
+- Primary: L1/L2 support engineers and incident responders who triage alerts and execute documented recovery steps.
+- Secondary: problem managers who need recurring-cause tracking and searchable RCA records; change managers/CAB reviewers who assess remediation risk; service owners who maintain CIs and runbooks.
+- Initial audience: engineering teams evaluating incident-assistant workflows locally. The MVP is not a production ITSM replacement.
 
-Engineers investigating an incident usually switch between logs, metrics, runbooks, and incident records. This product demonstrates how to collect that context and present a reviewable proposal while keeping a person responsible for the decision. Reducing investigation effort is the intended benefit; no production time-saving or accuracy improvement has been measured.
+## MVP capabilities
+1. Create/list/read incidents using ITIL-inspired ticket fields: ticket ID, impact, urgency, derived priority, category, affected configuration item, and major-incident flag.
+2. Investigate ten deterministic fintech/healthcare lab scenarios from observed synthetic logs and metrics plus runbook retrieval.
+3. Optionally use Spring AI OpenAI chat/embeddings; deterministic demo mode works without credentials.
+4. Show evidence, citations, root-cause hypothesis, cause/fix diagrams, risk, and short-term/corrective resolution classification.
+5. Record approval or rejection before any allowlisted simulated remediation; audit every transition and return before/after checks.
+6. Save a draft RCA for human review. A human-approved RCA summary can be retrieved later as a runbook reference.
+7. Create Problem and Change records, link them to incidents, and gate change progression through assessment, authorization, schedule, implementation, review, and closure.
+8. Maintain a local configuration-item inventory and synthetic domain workloads.
 
-## Users and value
+## Success measures
+- All ten scenarios complete investigation → approval → simulation in Compose integration tests.
+- Unsupported incidents remain non-executable.
+- Decisions, changes, and RCA review remain auditable.
+- Clean local setup works through Compose without a model API key.
+- Engineers can inspect observed evidence and supporting procedure.
 
-| User | Job to accomplish |
-| --- | --- |
-| On-call/SRE engineer | Review evidence and a proposed response to an incident |
-| DevOps or application support engineer | Locate relevant procedures and document a decision |
-| Developer/evaluator | Run reproducible incidents and inspect the integration and controls |
-
-Current use is local development, learning, and portfolio demonstration. Potential future customers are teams operating multiple services; customer demand and willingness to pay have not been validated.
-
-## Current requirements
-
-| ID | Requirement | Acceptance condition |
-| --- | --- | --- |
-| FR-01 | Record incidents | Service, title, description, severity, UUID, timestamps, and status persist |
-| FR-02 | Investigate supported scenarios | Retrieve fixture logs/metrics and relevant runbook chunks; return a hypothesis, citations, and proposal |
-| FR-03 | Retrieve with pgvector | Chunk/embedding records persist; search filters by service and embedding model |
-| FR-04 | Support two analysis modes | Demo needs no API key; optional OpenAI uses embeddings and schema-validated diagnosis text |
-| FR-05 | Require a human decision | Reviewer and note required; approve/reject are enforced in the backend |
-| FR-06 | Simulate allowed actions | Saved approval and matching context required; repeated execution returns the saved result |
-| FR-07 | Show audit history | Creation, analysis, decision, and execution events appear chronologically |
-| FR-08 | Ingest runbooks | Custom procedures are chunked and embedded; built-in identifiers cannot be overwritten through the API |
-
-## Main user journey
-
-1. Create one of ten sample incidents.
-2. Investigate; inspect the hypothesis, telemetry, citations, and risk.
-3. Enter a reviewer label and decision note.
-4. Approve an executable plan or reject it.
-5. Execute an approved simulation; inspect before/after values and audit history.
-
-Missing telemetry produces a non-executable result. Rejection prevents execution. Analysis failure is recorded and may be retried.
-
-## Operating requirements and boundaries
-
-- Runs locally with persistent PostgreSQL storage and documented startup commands.
-- Uses validated request fields, service tokens, and bounded database/HTTP connection timeouts.
-- Presents loading, failure, approval, and resolved states clearly.
-- Contains ten reproducible scenarios and automated unit/integration checks; see [verification evidence](VERIFICATION.md).
-- Demo diagnosis/actions are fixture-driven. Demo vectors are lexical hashes; the fixed 0.90 score is not measured accuracy.
-- OpenAI mode changes embeddings and diagnosis text; executable actions remain fixture-controlled.
-- Remediation changes simulated values only. RESOLVED does not mean a real system recovered.
-- No production login, RBAC, real infrastructure actions, autonomous planning, MCP, cloud deployment, or AI quality benchmark is included.
-
-## Completion and change control
-
-The implementation meets the Local MVP scope. Docker startup and live OpenAI calls remain unverified in this environment. Keep those validation gaps separate from implemented features. Use [Tasks.md](Tasks.md) for work status; any broader product phase needs an explicit user request.
+## Out of scope
+No production cloud/Kubernetes deployment, real infrastructure credentials, actual remediation, real patient/payment data, auto-approval, ticketing-system integration, model fine-tuning, or guarantee of ITIL certification/compliance. The data model is ITIL-inspired; mapping to an organization's practices requires customization.

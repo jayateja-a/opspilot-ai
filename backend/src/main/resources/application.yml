@@ -8,10 +8,24 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:demo-not-used}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4.1-mini}
+      embedding:
+        options:
+          model: ${EMBEDDING_MODEL:text-embedding-3-small}
 opspilot:
-  agent-url: ${AGENT_URL:http://localhost:8000}
+  ai:
+    mode: ${AI_MODE:demo}
+    embedding-model: ${EMBEDDING_MODEL:text-embedding-3-small}
   api-token: ${API_TOKEN:local-demo-token}
-  agent-token: ${AGENT_TOKEN:local-agent-token}
+  lab:
+    token: ${LAB_TOKEN:local-lab-token}
+    fintech-url: ${FINTECH_LAB_URL:http://localhost:8081}
+    healthcare-url: ${HEALTHCARE_LAB_URL:http://localhost:8082}
 management:
   endpoints:
     web:

@@ -26,7 +26,12 @@ export type Analysis = {
   };
   warnings: string[];
   tool_calls: { tool: string; status: string }[];
+  causal_graph?: Graph;
+  fix_graph?: Graph;
+  resolution_type?: string;
+  resolution_horizon?: string;
 };
+export type Graph = { nodes: {id:string;label:string}[]; edges: {from:string;to:string}[] };
 export type Incident = {
   id: string;
   service: string;
@@ -34,6 +39,11 @@ export type Incident = {
   description: string;
   severity: string;
   scenario_id: string;
+  ticket_number?: string;
+  priority?: string;
+  impact?: string;
+  urgency?: string;
+  affected_ci?: string;
   status: string;
   created_at: string;
   analysis: Analysis | null;
@@ -48,6 +58,7 @@ export type Incident = {
       verification: string;
     };
   } | null;
+  rcaDocuments?: {id:string;status:string;title:string;body:Record<string,unknown>}[];
 };
 export type Runbook = {
   id: string;

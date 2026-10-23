@@ -70,4 +70,14 @@ describe("dashboard", () => {
       }),
     );
   });
+
+  it("opens the ITSM workspace for CIs, Problems, and Changes", async () => {
+    vi.spyOn(globalThis,"fetch").mockImplementation(async()=>({ok:true,json:async()=>[]} as Response));
+    render(<App/>);
+    await screen.findByRole("button",{name:/ITSM records/});
+    fireEvent.click(screen.getByRole("button",{name:/ITSM records/}));
+    expect(await screen.findByText("Configuration items")).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Create Problem"})).toBeEnabled();
+    expect(screen.getByRole("button",{name:"Create Change"})).toBeEnabled();
+  });
 });

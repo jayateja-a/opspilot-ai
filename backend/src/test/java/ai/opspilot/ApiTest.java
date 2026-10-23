@@ -17,6 +17,7 @@ class ApiTest {
   @Autowired MockMvc mvc;
   @MockitoBean IncidentService incidents;
   @MockitoBean AgentClient agent;
+  @MockitoBean ItsmService itsm;
 
   @Test
   void deniesRequestsWithoutToken() throws Exception {

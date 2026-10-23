@@ -6,13 +6,43 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-opspilot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot-local-only}
       POSTGRES_DB: ${POSTGRES_DB:-opspilot}
-    ports: ["127.0.0.1:5432:5432"]
-    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    ports:
+      - 127.0.0.1:5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: [CMD-SHELL, pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB]
       interval: 3s
       timeout: 3s
       retries: 30
+  fintech-lab:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      DOMAIN: fintech
+      LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
+    expose:
+      - "8081"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  healthcare-lab:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    environment:
+      DOMAIN: healthcare
+      LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
+    expose:
+      - "8081"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
   backend:
     build:
       context: .
@@ -21,45 +51,28 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-opspilot}
       POSTGRES_USER: ${POSTGRES_USER:-opspilot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opspilot-local-only}
-      AGENT_URL: http://agent:8000
       API_TOKEN: ${API_TOKEN:-local-demo-token}
-      AGENT_TOKEN: ${AGENT_TOKEN:-local-agent-token}
-    ports: ["127.0.0.1:8080:8080"]
+      AI_MODE: ${AI_MODE:-demo}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-demo-not-used}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      LAB_TOKEN: ${LAB_TOKEN:-local-lab-token}
+      FINTECH_LAB_URL: http://fintech-lab:8081
+      HEALTHCARE_LAB_URL: http://healthcare-lab:8081
+    ports:
+      - 127.0.0.1:8080:8080
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres:
+        condition: service_healthy
+      fintech-lab:
+        condition: service_healthy
+      healthcare-lab:
+        condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; cat <&3 | grep -q UP'",
-        ]
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080; printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; cat <&3 | grep -q UP'"]
       interval: 5s
       timeout: 4s
       retries: 30
-  agent:
-    build:
-      context: .
-      dockerfile: ai-service/Dockerfile
-    environment: &agent_env
-      DATABASE_DSN: postgresql://${POSTGRES_USER:-opspilot}:${POSTGRES_PASSWORD:-opspilot-local-only}@postgres:5432/${POSTGRES_DB:-opspilot}
-      AGENT_TOKEN: ${AGENT_TOKEN:-local-agent-token}
-      AI_MODE: ${AI_MODE:-demo}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
-    depends_on:
-      backend: { condition: service_healthy }
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)",
-        ]
-      interval: 5s
-      timeout: 4s
-      retries: 60
   frontend:
     build:
       context: .
@@ -67,22 +80,40 @@ services:
     environment:
       API_TOKEN: ${API_TOKEN:-local-demo-token}
       NGINX_ENVSUBST_FILTER: ^API_TOKEN$
-    ports: ["127.0.0.1:3000:80"]
+    ports:
+      - 127.0.0.1:3000:80
     depends_on:
-      agent: { condition: service_healthy }
+      backend:
+        condition: service_healthy
   tests:
-    profiles: ["test"]
+    profiles: [test]
     build:
       context: .
-      dockerfile: ai-service/Dockerfile
+      dockerfile: tests/Dockerfile
     environment:
-      <<: *agent_env
       API_BASE: http://backend:8080/api
-      AGENT_BASE: http://agent:8000
       API_TOKEN: ${API_TOKEN:-local-demo-token}
       RUN_INTEGRATION: "1"
     depends_on:
-      agent: { condition: service_healthy }
-    command: ["python", "-m", "pytest", "-q", "tests", "e2e"]
+      backend:
+        condition: service_healthy
+      fintech-lab:
+        condition: service_healthy
+      healthcare-lab:
+        condition: service_healthy
+    command: [pytest, -q, lab/test_lab.py, scripts/e2e_test.py]
+  load:
+    profiles: [load]
+    image: grafana/k6:0.54.0
+    volumes:
+      - ./scripts/load.js:/scripts/load.js:ro
+    environment:
+      TARGET: ${LOAD_TARGET:-http://fintech-lab:8081}
+      LOAD_VUS: ${LOAD_VUS:-50}
+      LOAD_DURATION: ${LOAD_DURATION:-2m}
+    depends_on:
+      fintech-lab:
+        condition: service_healthy
+    command: [run, /scripts/load.js]
 volumes:
   postgres_data:

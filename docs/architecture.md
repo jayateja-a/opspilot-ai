@@ -1,97 +1,58 @@
-# End-to-end architecture
+# Architecture
 
-Current implementation, updated 2026-10-15. Product scope: [PRD.md](PRD.md). Detailed routes and payloads: [API.md](API.md).
-
-## Components and entry points
+## Runtime topology
 
 ```mermaid
 flowchart TD
-  UI["React dashboard"] --> Proxy["Nginx or Vite proxy"]
-  Proxy --> Java["Spring Boot control plane"]
-  Java --> DB[("PostgreSQL + pgvector")]
-  Java --> Python["FastAPI investigation service"]
-  Python --> DB
-  Python --> Evidence["Fixture logs and metrics"]
-  Python --> Analysis["Demo rules or OpenAI diagnosis"]
-  Python --> Simulation["Allowlisted local simulation"]
+  UI["React dashboard"] --> API["Spring Boot API"]
+  API --> DB["PostgreSQL + pgvector"]
+  API --> FIN["Fintech synthetic lab"]
+  API --> HC["Healthcare synthetic lab"]
+  API --> AI["Spring AI provider, optional"]
 ```
 
-| Component | Responsibility | Code to inspect |
-| --- | --- | --- |
-| React/TypeScript | Queue, investigation, decisions, evidence, audit, runbook form | `frontend/src/App.tsx`, `frontend/src/api.ts` |
-| Local proxy | Forward `/api` and supply backend bearer token | `frontend/nginx.conf.template`, `frontend/vite.config.ts` |
-| Spring Boot | API validation, lifecycle transitions, persistence, approval, audit | `backend/src/main/java/ai/opspilot/Api.java`, `IncidentService.java` |
-| Java agent client | Authenticated synchronous calls to Python | `backend/src/main/java/ai/opspilot/AgentClient.java` |
-| FastAPI | Investigation/ingestion/execution endpoints and agent token check | `ai-service/app/main.py`, `models.py` |
-| Retrieval/provider layer | Chunking, embeddings, vector search, structured diagnosis | `ai-service/app/retrieval.py`, `embeddings.py`, `reasoning.py` |
-| Mock tools | Fixture evidence and bounded simulation outcomes | `ai-service/app/tools.py`, `fixtures/incidents.json` |
-| Database migrations | All schema creation, including vector extension | `backend/src/main/resources/db/migration/V1__schema.sql` |
+Compose starts PostgreSQL, two isolated synthetic lab containers, Spring Boot, and the frontend. The test profile runs lab unit tests and black-box API regression tests against the same stack.
 
-React production builds use `tsc` plus `frontend/build.mjs` (esbuild). Vite serves development and configures Vitest. Production static assets are served by Nginx.
-
-## Startup and local connectivity
-
-Compose startup order: PostgreSQL health → Spring/Flyway migrations and health → Python runbook seeding and health → frontend. FastAPI does not own a second migration system.
-
-| Service | Compose address | Host entry |
-| --- | --- | --- |
-| Dashboard | `frontend:80` | `http://localhost:3000` |
-| Java API | `backend:8080` | `http://localhost:8080`; Swagger at `/swagger-ui/index.html` |
-| Python | `agent:8000` | Internal only in Compose; native development uses port 8000 |
-| Database | `postgres:5432` | localhost:5432; named volume persists data |
-
-Host bindings use `127.0.0.1`. The dev dashboard uses port 5173. Compose reads root `.env`; native processes need environment variables exported explicitly. Settings and startup commands are in the root [README](../README.md).
-
-## Investigation request
-
-1. Browser sends `POST /api/incidents` with `service`, `title`, `description`, `severity`, and optional `scenarioId`. Java validates scenario/service correspondence, persists OPEN, and audits creation.
-2. `POST /api/incidents/{id}/analyze` locks the incident row and permits OPEN or ANALYSIS_FAILED only.
-3. Java calls Python `/v1/analyze` with `incident_id`, `service`, `description`, and `scenario_id`. The camelCase creation field becomes snake_case in the internal contract.
-4. Python collects fixture logs and metrics, embeds the query, and retrieves runbook chunks. Matching fixture evidence plus its expected retrieved runbook makes a proposal executable.
-5. Demo mode returns the fixture hypothesis; OpenAI mode requests schema-validated diagnosis text. Evidence/runbook IDs from the model must belong to the supplied context.
-6. Java stores analysis JSONB, sets AWAITING_APPROVAL, and appends an event. The dashboard renders the result and its citations.
-
-Analysis includes `mode`, `root_cause`, `reasoning`, `confidence`, `evidence`, `citations`, `recommendation`, `tool_calls`, and `warnings`. The model does not choose arbitrary executable tools.
-
-## Approval and execution
+## Investigation flow
 
 ```mermaid
-stateDiagram-v2
-  [*] --> OPEN: Create
-  OPEN --> ANALYSIS_FAILED: Investigation fails
-  OPEN --> AWAITING_APPROVAL: Investigation succeeds
-  ANALYSIS_FAILED --> ANALYSIS_FAILED: Retry fails
-  ANALYSIS_FAILED --> AWAITING_APPROVAL: Retry succeeds
-  AWAITING_APPROVAL --> APPROVED: Approve executable plan
-  AWAITING_APPROVAL --> REJECTED: Reject
-  APPROVED --> RESOLVED: Simulation verifies
-  RESOLVED --> RESOLVED: Return saved receipt
+sequenceDiagram
+  participant H as Human
+  participant UI as React UI
+  participant S as Spring Boot
+  participant L as Synthetic lab
+  participant P as PostgreSQL/pgvector
+  H->>UI: Create incident and request investigation
+  UI->>S: Incident API request
+  S->>L: Activate named fault and read telemetry
+  S->>P: Search runbook vectors by service and model
+  S->>S: Build diagnosis and remediation proposal
+  S->>P: Persist evidence, RCA draft, and audit event
+  S-->>UI: Report, diagrams, approval request
+  H->>UI: Approve or reject
+  UI->>S: Persist human decision
+  S->>P: Audit decision and simulated verification
 ```
 
-Java accepts one decision with a nonblank reviewer and note. It blocks approval if `executable=false`. Analysis cannot be changed after reaching AWAITING_APPROVAL.
+## Components
+| Component | Responsibility |
+|---|---|
+| `Api.java` | Bearer-protected incidents, runbooks, configuration items, problem/change records, and RCA review |
+| `IncidentService` | Incident state machine, ticket metadata, orchestration, approval checks, simulation, audit, RCA draft creation |
+| `AgentClient` | Spring AI adapter, deterministic embeddings/diagnosis, OpenAI embeddings/chat, pgvector SQL search, allowlisted simulated outcomes |
+| `LabClient` | Select lab by scenario domain, activate only allowlisted faults, fetch synthetic telemetry |
+| `ItsmService` | CI inventory, linked problem/change records, guarded change transitions, RCA review and RAG promotion |
+| `lab/app.py` | Synthetic HTTP workload, fault controls, logs, metrics, domain endpoints |
+| PostgreSQL/Flyway | Ticket and workflow records, JSON evidence, audit, runbooks and 1536-dimension vector chunks |
+| React | Light dashboard for queue, report, evidence, approval/rejection, runbooks and audit history |
 
-Execution loads the saved APPROVE record and sends incident UUID, approval UUID, service, scenario, and action to Python. Python independently checks the persisted decision/status and exact approved context, then enforces the fixture action allowlist. It returns simulated before/after metrics and a stable receipt. Java stores one execution and one execution event and marks RESOLVED. A failed execution leaves APPROVED through transaction rollback. Rejected incidents cannot execute or reopen.
+## Storage and RAG
+`V1__schema.sql` creates incident/workflow/runbook schema and pgvector. `V2__itsm_records.sql` adds ITIL fields, CIs, problem/change tables, links, and RCA records. Flyway owns schema changes.
 
-## Retrieval and data ownership
+Runbooks are split into overlapping chunks stored with embedding model identifiers. Retrieval filters by service/model and sorts by cosine distance. Demo embeddings are deterministic token-hash vectors for repeatable tests; they are not semantically equivalent to learned embeddings. OpenAI mode uses Spring AI's embedding model. Reviewed RCA summaries may become retrieval text; this does not train/fine-tune a model.
 
-Runbooks split at 180 words with 30-word overlap. Chunk embeddings have 1536 dimensions and a model tag. Query embeddings use description plus evidence. Exact pgvector cosine search filters by service/model and returns up to three chunks; no approximate index is required at this dataset size.
+## Trust boundaries
+The browser uses the local Spring API through the frontend proxy. API requests use a local bearer token. Fault-control requests use a separate token and scenario allowlists. Lab containers have no Docker socket or host mount. The external AI provider is contacted only in `openai` mode.
 
-Demo uses `demo-hash-v1` lexical vectors. OpenAI uses the configured semantic embedding model at 1536 dimensions. Switching modes reindexes built-in runbooks at startup; custom procedures must be reingested for the active model. Custom IDs cannot start with `rb-`.
-
-| Tables | Data owner |
-| --- | --- |
-| `services`, `incidents`, `approvals`, `executions`, `audit_events` | Spring Boot |
-| `runbooks`, `runbook_chunks` | FastAPI writes; Flyway owns schema |
-
-UUIDs identify incidents/approvals; JSONB stores analysis, audit details, and simulation results. Unique approval/execution constraints and incident row locks protect transitions.
-
-## Failure and trust boundaries
-
-- Java uses a 5-second connect timeout and 60-second read timeout for Python. Provider embedding/diagnosis calls have 40/45-second timeouts; combined work can exceed Java's deadline. See [Tasks.md](Tasks.md) for follow-up.
-- Analysis errors persist ANALYSIS_FAILED with a generic error and retryable event. The analyze API returns the incident with HTTP 200; inspect its status.
-- Other invalid transitions return 409. More status details are in [API.md](API.md).
-- Browser proxy supplies API_TOKEN; Python requires AGENT_TOKEN. These are local service controls, not authenticated human identity.
-- Retrieved text, incident descriptions, and logs are untrusted data. Reference validation does not prove semantic correctness.
-- Synchronous external calls occur inside Java transactions. There is no durable queue, checkpointed planner, or guarantee of exactly-once real-world effects.
-
-The ten scenario IDs are `db-pool`, `bad-release`, `oom`, `cpu`, `disk`, `redis`, `kafka`, `certificate`, `dns`, and `rate-limit`. Their procedures live in `fixtures/runbooks.json`. All telemetry and remediation are simulated.
+## Limitations
+The lab is synthetic and fixture-driven, not a production-like financial/healthcare application. Lab fault state is singleton and intended for a single-user local demo. ITIL fields/workflows are a lightweight local model, not every ITIL practice or a certified ITSM integration.
