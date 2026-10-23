@@ -23,10 +23,16 @@ public class LabClient {
     this.fintech=client(f); this.healthcare=client(h); this.commerce=client(c); this.token=token; this.json=json;
   }
   private RestClient client(String url){var factory=new SimpleClientHttpRequestFactory();factory.setConnectTimeout(1500);factory.setReadTimeout(3000);return RestClient.builder().baseUrl(url).requestFactory(factory).build();}
-  private RestClient forScenario(String id){return id.startsWith("commerce-")?commerce:HEALTHCARE.contains(id)?healthcare:fintech;}
+  private RestClient forScenario(String id,String service){
+    // Route using the owning service as well as the fixture ID. The scenario ID is
+    // persisted through the incident API; service routing provides a stable guard
+    // for imported/renamed commerce tickets that do not use the fixture prefix.
+    if("checkout-service".equals(service)||id.startsWith("commerce-"))return commerce;
+    return HEALTHCARE.contains(id)?healthcare:fintech;
+  }
   @SuppressWarnings("unchecked")
-  public Map<String,Object> activateAndRead(String scenarioId) {
-    RestClient client=forScenario(scenarioId);
+  public Map<String,Object> activateAndRead(String scenarioId,String service) {
+    RestClient client=forScenario(scenarioId,service);
     byte[] payload;
     try { payload=json.writeValueAsBytes(Map.of("scenario_id",scenarioId)); }
     catch (Exception e) { throw new IllegalStateException("Could not serialize lab fault activation request",e); }
@@ -35,5 +41,5 @@ public class LabClient {
     client.post().uri("/ops/faults").header("X-Lab-Token",token).contentType(MediaType.APPLICATION_JSON).contentLength(payload.length).body(payload).retrieve().toBodilessEntity();
     return client.get().uri("/ops/telemetry").retrieve().body(Map.class);
   }
-  public void clear(String scenarioId){forScenario(scenarioId).post().uri("/ops/faults").header("X-Lab-Token",token).body(Map.of()).retrieve().toBodilessEntity();}
+  public void clear(String scenarioId,String service){forScenario(scenarioId,service).post().uri("/ops/faults").header("X-Lab-Token",token).body(Map.of()).retrieve().toBodilessEntity();}
 }
