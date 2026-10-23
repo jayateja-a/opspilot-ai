@@ -33,9 +33,9 @@ describe("dashboard", () => {
         if (path === "/api/scenarios")
           data = [
             {
-              id: "db-pool",
-              service: "payment-service",
-              title: "Pool exhaustion",
+              id: "commerce-db-pool",
+              service: "checkout-service",
+              title: "E-commerce checkout pool exhaustion",
               severity: "P1",
               description: "Investigate",
             },
@@ -43,8 +43,8 @@ describe("dashboard", () => {
         if (path === "/api/incidents" && options?.method === "POST")
           data = {
             id: "123",
-            service: "payment-service",
-            title: "Pool exhaustion",
+            service: "checkout-service",
+            title: "E-commerce checkout pool exhaustion",
             description: "Investigate",
             severity: "P1",
             status: "OPEN",
@@ -71,7 +71,7 @@ describe("dashboard", () => {
       "/api/incidents",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining('"scenarioId":"db-pool"'),
+        body: expect.stringContaining('"scenarioId":"commerce-db-pool"'),
       }),
     );
   });

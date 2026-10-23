@@ -40,7 +40,7 @@ export default function App() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [createOpen, setCreateOpen] = useState(false),
-    [scenarioId, setScenarioId] = useState("db-pool");
+    [scenarioId, setScenarioId] = useState("commerce-db-pool");
   const [reviewer, setReviewer] = useState("Local operator"),
     [note, setNote] = useState(""),
     [tab, setTab] = useState<"analysis" | "evidence" | "activity">("analysis");
