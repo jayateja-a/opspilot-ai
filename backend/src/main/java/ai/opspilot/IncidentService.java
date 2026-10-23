@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -193,8 +195,19 @@ public class IncidentService {
 
   static String analysisFailureMessage(Throwable failure) {
     for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+      if (cause instanceof HttpClientErrorException response) {
+        return switch (response.getStatusCode().value()) {
+          case 400 -> "The synthetic lab rejected the fault request as malformed. Rebuild the backend and lab containers.";
+          case 401 -> "The synthetic lab rejected authentication. Check that backend and lab use the same LAB_TOKEN.";
+          case 422 -> "The selected scenario is not allowed in the routed lab. Check the scenario-to-domain mapping.";
+          default -> "The synthetic lab rejected the request. Check backend logs for its HTTP status.";
+        };
+      }
+      if (cause instanceof ResourceAccessException) {
+        return "Could not connect to the synthetic service lab. Check that the lab containers are healthy and their Compose URLs are correct.";
+      }
       if (cause instanceof RestClientException) {
-        return "Could not read the synthetic service lab. Check that both lab containers are healthy and LAB_TOKEN matches.";
+        return "The synthetic service lab returned an unexpected response. Check backend logs for details.";
       }
       if (cause instanceof DataAccessException || cause instanceof java.sql.SQLException) {
         return "Runbook retrieval failed. Check PostgreSQL health, Flyway migrations, and the pgvector extension.";
