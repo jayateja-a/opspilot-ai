@@ -62,6 +62,11 @@ describe("dashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "New incident" }));
     fireEvent.click(screen.getByRole("button", { name: "Create incident" }));
     await screen.findByRole("button", { name: "Investigate incident" });
+    expect(screen.getByRole("tablist")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /analysis/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/incidents",
       expect.objectContaining({
