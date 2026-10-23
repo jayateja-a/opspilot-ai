@@ -189,7 +189,7 @@ services:
         condition: service_healthy
       commerce-controller:
         condition: service_healthy
-    command: [pytest, -q, lab/test_lab.py, lab/test_commerce.py, scripts/e2e_test.py]
+    command: [pytest, -q, lab/test_lab.py, lab/test_commerce.py, scripts/test_evaluate_ai.py, scripts/e2e_test.py]
   load:
     profiles: [load]
     image: grafana/k6:0.54.0

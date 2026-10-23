@@ -1,6 +1,7 @@
 """Black-box tests for the local multi-container commerce workload."""
 import json
 import os
+import pathlib
 import socket
 import subprocess
 import sys
@@ -81,6 +82,22 @@ def test_generated_commerce_traffic_observes_pool_exhaustion_and_queue_backlog()
             if observed["metrics"]["queue_backlog"] == 0: break
             time.sleep(.05)
         assert observed["metrics"]["queue_backlog"] == 0
+
+        # Exercise every additional fault injector and prove its family-specific
+        # measurement is collected from a running service.
+        catalog = json.loads((APP.parents[1] / "fixtures" / "incidents.json").read_text())
+        exercised = {"db-pool", "queue-backlog"}
+        for scenario in catalog:
+            family = scenario.get("fault_family")
+            if not family or family in exercised: continue
+            exercised.add(family)
+            activated=request(urls["controller"], "/ops/faults", "POST", {"scenario_id": scenario["id"]}, TOKEN)
+            assert activated[0] == 200, f"{scenario['id']} activation failed: {activated}"
+            for _ in range(6): request(urls["storefront"], "/shop")
+            observed = request(urls["controller"], "/ops/telemetry")[1]["metrics"]
+            key = scenario["runtime_signal"]
+            value = observed.get("queue_backlog", 0) if key == "queue_backlog" else observed.get("fault_signals", {}).get(key, 0)
+            assert value >= scenario.get("runtime_min", 1), f"{scenario['id']} {key}={value}: {observed}"
     finally:
         for process in processes:
             process.terminate()

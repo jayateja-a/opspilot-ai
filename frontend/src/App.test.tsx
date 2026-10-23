@@ -76,6 +76,23 @@ describe("dashboard", () => {
     );
   });
 
+  it("filters the expanded scenario catalog by priority and symptom", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const path = String(url);
+      const data = path === "/api/scenarios" ? [
+        { id: "commerce-db-pool-p0", service: "checkout", title: "Database pool exhaustion", severity: "P0", description: "Connections exhausted" },
+        { id: "commerce-queue-p5", service: "worker", title: "Queue backlog", severity: "P5", description: "Queue depth elevated" },
+      ] : [];
+      return { ok: true, json: async () => data } as Response;
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "New incident" }));
+    fireEvent.change(screen.getByPlaceholderText(/search service/i), { target: { value: "P0" } });
+    expect(screen.getByText("1 matching scenarios")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /P0 · Database pool exhaustion/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /P5 · Queue backlog/ })).not.toBeInTheDocument();
+  });
+
   it("opens the ITSM workspace for CIs, Problems, and Changes", async () => {
     vi.spyOn(globalThis,"fetch").mockImplementation(async()=>({ok:true,json:async()=>[]} as Response));
     render(<App/>);

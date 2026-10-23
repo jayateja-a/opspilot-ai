@@ -40,6 +40,7 @@ export default function App() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [createOpen, setCreateOpen] = useState(false),
+    [scenarioSearch, setScenarioSearch] = useState(""),
     [scenarioId, setScenarioId] = useState("commerce-db-pool");
   const [reviewer, setReviewer] = useState("Local operator"),
     [note, setNote] = useState(""),
@@ -197,7 +198,7 @@ export default function App() {
             {page === "incidents" && (
               <button
                 className="primary heading-button"
-                onClick={() => setCreateOpen(true)}
+                onClick={() => { setScenarioSearch(""); setCreateOpen(true); }}
                 disabled={busy || !scenarios.length}
               >
                 <Plus size={16} />
@@ -238,7 +239,7 @@ export default function App() {
                 </div>
                 <div className="system-status">
                   <Cpu size={22} />
-                  <span>10 reproducible scenarios</span>
+                  <span>{scenarios.length} reproducible scenarios</span>
                   <small>Demo reasoning / optional OpenAI</small>
                 </div>
               </div>
@@ -730,22 +731,35 @@ export default function App() {
               </button>
             </div>
             <p>
-              Choose a reproducible scenario. Each includes telemetry and a
-              matching runbook.
+              Choose from {scenarios.length} reproducible incidents. Commerce
+              cases activate a live synthetic fault and collect runtime telemetry.
             </p>
+            <label>
+              Find a scenario
+              <input
+                className="scenario-search"
+                type="search"
+                placeholder="Search service, symptom, or priority…"
+                value={scenarioSearch}
+                onChange={(e) => setScenarioSearch(e.target.value)}
+              />
+            </label>
             <label>
               Scenario
               <select
                 value={scenarioId}
                 onChange={(e) => setScenarioId(e.target.value)}
               >
-                {scenarios.map((s) => (
+                {scenarios.filter((s) => `${s.title} ${s.service} ${s.id} ${s.severity} ${s.description}`.toLowerCase().includes(scenarioSearch.trim().toLowerCase())).map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.title} · {s.service}
+                    {s.severity} · {s.title} · {s.service}
                   </option>
                 ))}
               </select>
             </label>
+            <small className="scenario-count" aria-live="polite">
+              {scenarios.filter((s) => `${s.title} ${s.service} ${s.id} ${s.severity} ${s.description}`.toLowerCase().includes(scenarioSearch.trim().toLowerCase())).length} matching scenarios
+            </small>
             <div className="scenario-preview">
               <span className="eyebrow">SIMULATED INCIDENT</span>
               <h3>{scenarios.find((s) => s.id === scenarioId)?.title}</h3>

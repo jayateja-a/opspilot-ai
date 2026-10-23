@@ -105,9 +105,11 @@ public class IncidentService {
   public Map<String, Object> create(Api.Create request) {
     UUID id = UUID.randomUUID();
     String scenario = request.scenarioId();
-    String impact=Objects.toString(request.impact(),request.severity().equals("P1")?"HIGH":request.severity().equals("P2")?"HIGH":"MEDIUM");
-    String urgency=Objects.toString(request.urgency(),request.severity().equals("P1")?"HIGH":request.severity().equals("P2")?"MEDIUM":"MEDIUM");
-    String priority=PriorityPolicy.derive(impact,urgency);
+    String impact=Objects.toString(request.impact(),switch(request.severity()){case "P0","P1","P2"->"HIGH";case "P3","P4"->"MEDIUM";default->"LOW";});
+    String urgency=Objects.toString(request.urgency(),switch(request.severity()){case "P0","P1"->"HIGH";case "P2","P3"->"MEDIUM";case "P4"->"LOW";default->"LOW";});
+    // P0 is an explicit local emergency override; P1-P5 are derived from
+    // impact and urgency using the configured ITIL-style matrix.
+    String priority=request.severity().equals("P0")?"P0":PriorityPolicy.derive(impact,urgency);
     if (scenario != null) {
       Object raw = agent.scenarios();
       if (!(raw instanceof List<?> items))
@@ -140,7 +142,7 @@ public class IncidentService {
         priority,
         Objects.toString(request.category(),"APPLICATION").toUpperCase(Locale.ROOT),
         Objects.toString(request.affectedCi(),request.service()),
-        priority.equals("P1"),
+        priority.equals("P0")||priority.equals("P1"),
         Objects.toString(request.reportedBy(),"Local operator"),
         Objects.toString(request.sourceChannel(),"OPS PILOT"));
     event(id, "INCIDENT_CREATED", Map.of("simulation", true));

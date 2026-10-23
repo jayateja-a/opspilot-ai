@@ -9,7 +9,8 @@ public final class PriorityPolicy {
       case "HIGH:HIGH" -> "P1";
       case "HIGH:MEDIUM","MEDIUM:HIGH" -> "P2";
       case "HIGH:LOW","MEDIUM:MEDIUM","LOW:HIGH" -> "P3";
-      case "MEDIUM:LOW","LOW:MEDIUM","LOW:LOW" -> "P4";
+      case "MEDIUM:LOW","LOW:MEDIUM" -> "P4";
+      case "LOW:LOW" -> "P5";
       default -> throw new IllegalArgumentException("Impact and urgency must be HIGH, MEDIUM, or LOW");
     };
   }

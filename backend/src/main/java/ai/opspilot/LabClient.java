@@ -13,7 +13,6 @@ import org.springframework.web.client.RestClient;
 @Component
 public class LabClient {
   private static final Set<String> HEALTHCARE=Set.of("oom","certificate","dns");
-  private static final Set<String> COMMERCE=Set.of("commerce-db-pool","commerce-queue-backlog");
   private final RestClient fintech,healthcare,commerce;
   private final String token;
   private final ObjectMapper json;
@@ -24,7 +23,7 @@ public class LabClient {
     this.fintech=client(f); this.healthcare=client(h); this.commerce=client(c); this.token=token; this.json=json;
   }
   private RestClient client(String url){var factory=new SimpleClientHttpRequestFactory();factory.setConnectTimeout(1500);factory.setReadTimeout(3000);return RestClient.builder().baseUrl(url).requestFactory(factory).build();}
-  private RestClient forScenario(String id){return COMMERCE.contains(id)?commerce:HEALTHCARE.contains(id)?healthcare:fintech;}
+  private RestClient forScenario(String id){return id.startsWith("commerce-")?commerce:HEALTHCARE.contains(id)?healthcare:fintech;}
   @SuppressWarnings("unchecked")
   public Map<String,Object> activateAndRead(String scenarioId) {
     RestClient client=forScenario(scenarioId);

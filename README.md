@@ -50,9 +50,13 @@ Spring AI 1.1.x is used with Spring Boot 3.5.x. RAG uses Spring AI's `EmbeddingM
 
 ## Synthetic scenarios
 
-The original 10 cases cover database pool saturation, release regression, memory pressure, CPU saturation, disk pressure, Redis outage, Kafka lag, TLS expiry, DNS failure, and rate limiting. Two e-commerce cases add a measured checkout database-pool failure and a growing order-worker queue. By default, 12 synthetic shoppers generate continuous traffic; configure this with `COMMERCE_TRAFFIC_USERS` and `COMMERCE_TRAFFIC_INTERVAL_SECONDS`.
+The catalog contains 10 fixture-based fintech/healthcare cases and 72 e-commerce cases: 12 live fault families, each exercised at P0 through P5 impact profiles. P0 is an explicit local emergency override; P1–P5 follow the impact/urgency matrix. By default, 12 synthetic shoppers generate continuous traffic; configure this with `COMMERCE_TRAFFIC_USERS` and `COMMERCE_TRAFFIC_INTERVAL_SECONDS`.
 
 E-commerce requests follow storefront → checkout → inventory. The pool fault holds a small bounded pool long enough for concurrent shoppers to observe acquisition timeouts. The queue fault pauses the background worker so pending orders rise while traffic continues. Investigation reads per-service logs and measured request/error/latency, pool, and queue metrics; the diagnosis is withheld unless runtime signals and a matching runbook are present. These containers and their in-memory order/queue state are local synthetic workloads, not production systems or a real PostgreSQL-backed commerce app. Faults and remediation never touch external infrastructure.
+
+## Provider-backed AI evaluation
+
+Set `AI_MODE=openai` and `OPENAI_API_KEY` in `.env`, start Compose, then run `API_BASE=http://localhost:8080/api API_TOKEN=local-demo-token python scripts/evaluate_ai.py --limit 12 --output ai-evaluation.json`. Omit `--limit` to evaluate all 82 labeled cases. Each case creates and analyzes an incident but does not approve or execute remediation. The report measures diagnosis keyword match, expected-runbook retrieval, citation grounding, action match, evidence signal verification, latency, and confidence calibration. Provider calls may incur charges; keyword matching is a screening metric and should be reviewed by engineers before being treated as a product accuracy result.
 
 ## Test coverage
 
@@ -70,7 +74,7 @@ A CI run is the authoritative full-stack gate. The exact tests run locally depen
 | `backend/` | Spring Boot API, Spring AI, Flyway migrations, tests |
 | `lab/` | Synthetic domain workloads, cooperating commerce services, telemetry controller, and lab tests |
 | `frontend/` | Light React operations dashboard |
-| `fixtures/` | 12 scenario definitions and local runbooks |
+| `fixtures/` | 82 labeled scenarios and 22 runbooks |
 | `scripts/` | Local start/stop, Compose integration, smoke and load helpers |
 | `docs/` | Product, architecture, safety, design, task plan, and decision memory |
 

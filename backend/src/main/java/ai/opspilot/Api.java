@@ -23,7 +23,7 @@ public class Api {
       @NotBlank @Size(max = 80) String service,
       @NotBlank @Size(max = 160) String title,
       @NotBlank @Size(max = 8000) String description,
-      @Pattern(regexp = "P[123]") @NotNull String severity,
+      @Pattern(regexp = "P[0-5]") @NotNull String severity,
       @Size(max = 80) String scenarioId,
       @Pattern(regexp="HIGH|MEDIUM|LOW") String impact,
       @Pattern(regexp="HIGH|MEDIUM|LOW") String urgency,

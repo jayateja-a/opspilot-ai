@@ -31,7 +31,7 @@ class AgentClientTest {
 
     agent.seedRunbooks();
 
-    verify(db, times(12))
+    verify(db, times(22))
         .update(
             startsWith("INSERT INTO runbooks"),
             any(),

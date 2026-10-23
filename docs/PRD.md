@@ -13,7 +13,7 @@ Support engineers spend time switching among alerts, metrics, procedures, ticket
 
 ## MVP capabilities
 1. Create/list/read incidents using ITIL-inspired ticket fields: ticket ID, impact, urgency, derived priority, category, affected configuration item, and major-incident flag.
-2. Investigate ten fintech/healthcare lab scenarios plus two e-commerce workload faults using collected service telemetry and runbook retrieval. E-commerce diagnoses require measured runtime indicators.
+2. Investigate ten fintech/healthcare lab scenarios plus 72 e-commerce cases across twelve runtime fault families and six priority profiles using collected service telemetry and runbook retrieval.
 3. Optionally use Spring AI OpenAI chat/embeddings; deterministic demo mode works without credentials.
 4. Show evidence, citations, root-cause hypothesis, cause/fix diagrams, risk, and short-term/corrective resolution classification.
 5. Record approval or rejection before any allowlisted simulated remediation; audit every transition and return before/after checks.
@@ -22,7 +22,7 @@ Support engineers spend time switching among alerts, metrics, procedures, ticket
 8. Maintain a local configuration-item inventory and synthetic workloads, including generated e-commerce traffic across cooperating services.
 
 ## Success measures
-- All twelve scenarios complete investigation → approval → simulation in Compose integration tests, with runtime signal assertions for the two commerce cases.
+- All 82 scenarios complete investigation → approval → simulation in Compose integration tests, with measured signal assertions for the commerce cases.
 - Unsupported incidents remain non-executable.
 - Decisions, changes, and RCA review remain auditable.
 - Clean local setup works through Compose without a model API key.

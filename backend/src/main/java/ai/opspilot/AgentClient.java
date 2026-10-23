@@ -51,7 +51,7 @@ public class AgentClient {
     if(existing.isEmpty()) saveBook(book);
   }}
 
-  public Object scenarios() { return scenarios.stream().map(s->{var r=new LinkedHashMap<String,Object>(); for(String k:List.of("id","service","title","severity","description"))r.put(k,s.get(k));return r;}).toList(); }
+  public Object scenarios() { return scenarios.stream().map(s->{var r=new LinkedHashMap<String,Object>(); for(String k:List.of("id","service","title","severity","description","priority","record_type")) if(s.containsKey(k))r.put(k,s.get(k));return r;}).toList(); }
   public Object runbooks() { return db.queryForList("SELECT id,service,title,content,action,risk FROM runbooks ORDER BY id"); }
 
   public Object ingest(Map<String,Object> request) {
@@ -77,19 +77,17 @@ public class AgentClient {
     if(scenario!=null&&!service.equals(scenario.get("service"))) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,"Scenario and service must match");
     List<Map<String,Object>> evidence=new ArrayList<>(); List<Map<String,Object>> calls=new ArrayList<>();
     if(scenario!=null){var telemetry=lab.activateAndRead(sid);evidence.add(Map.of("id","logs:1","type","logs","source",telemetry.get("domain"),"data",telemetry.get("logs")));evidence.add(Map.of("id","metrics:1","type","metrics","source",telemetry.get("domain"),"data",telemetry.get("metrics")));calls.add(Map.of("tool","read_lab_logs","status","ok"));calls.add(Map.of("tool","read_lab_metrics","status","ok"));}
-    var citations=db.queryForList("SELECT c.id AS chunk_id,c.runbook_id,r.title,c.content,1-(c.embedding <=> ?) AS score FROM runbook_chunks c JOIN runbooks r ON r.id=c.runbook_id WHERE r.service=? AND c.embedding_model=? ORDER BY c.embedding <=> ?,c.id LIMIT 3",pgvector(embed(description+" "+evidence)),service,embeddingModel,pgvector(embed(description+" "+evidence)));
+    var citations=db.queryForList("SELECT c.id AS chunk_id,c.runbook_id,r.title,c.content,1-(c.embedding <=> ?) AS score FROM runbook_chunks c JOIN runbooks r ON r.id=c.runbook_id WHERE r.service=? AND c.embedding_model=? ORDER BY c.embedding <=> ?,c.id LIMIT 5",pgvector(embed(description+" "+evidence)),service,embeddingModel,pgvector(embed(description+" "+evidence)));
     calls.add(Map.of("tool","retrieve_runbooks","status","ok","count",citations.size()));
     boolean matchingRunbook=scenario!=null&&citations.stream().anyMatch(c->Objects.equals(c.get("runbook_id"),scenario.get("expected_runbook")));
     Map<String,Object> observedMetrics=Map.of();
     for(var item:evidence) if("metrics".equals(item.get("type"))&&item.get("data") instanceof Map<?,?> data) {
       var values=new LinkedHashMap<String,Object>();data.forEach((k,v)->values.put(Objects.toString(k),v));observedMetrics=values;
     }
-    boolean commerceSignal=switch(sid) {
-      case "commerce-db-pool" -> number(observedMetrics.get("database_pool_size"))>0 &&
-          (number(observedMetrics.get("checkout_error_rate"))>0 || number(observedMetrics.get("database_waiters"))>0);
-      case "commerce-queue-backlog" -> number(observedMetrics.get("queue_backlog"))>0;
-      default -> true;
-    };
+    String requiredSignal=Objects.toString(scenario==null?null:scenario.get("runtime_signal"),"");
+    Map<?,?> signalMap=observedMetrics.get("fault_signals") instanceof Map<?,?> m?m:Map.of();
+    double observedSignal=requiredSignal.equals("queue_backlog")?number(observedMetrics.get("queue_backlog")):number(signalMap.get(requiredSignal));
+    boolean commerceSignal=requiredSignal.isBlank()||observedSignal>=number(scenario.getOrDefault("runtime_min",1));
     boolean supported=matchingRunbook&&commerceSignal;
     String cause="Insufficient evidence to identify a root cause."; String reasoning="Collect telemetry and a matching runbook before proposing an executable action."; double confidence=0;
     List<String>warnings=new ArrayList<>(List.of("Container telemetry and remediation are synthetic lab data."));
@@ -103,12 +101,9 @@ public class AgentClient {
       } else {
         cause=Objects.toString(scenario.get("root_cause"));
         reasoning=switch(sid) {
-          case "commerce-db-pool" -> "Observed checkout error rate="+observedMetrics.getOrDefault("checkout_error_rate",0)+
-              ", database pool size="+observedMetrics.getOrDefault("database_pool_size",0)+
-              ", waiters="+observedMetrics.getOrDefault("database_waiters",0)+" during generated storefront traffic; retrieved runbook matches these measurements. Demo reasoning is deterministic, not an LLM diagnosis.";
-          case "commerce-queue-backlog" -> "Observed order queue backlog="+observedMetrics.getOrDefault("queue_backlog",0)+
-              " and processed total="+observedMetrics.getOrDefault("queue_processed_total",0)+" while storefront traffic continued; retrieved runbook matches these measurements. Demo reasoning is deterministic, not an LLM diagnosis.";
-          default -> "The synthetic telemetry matches the retrieved procedure. Demo reasoning is deterministic, not an LLM diagnosis.";
+          default -> sid.startsWith("commerce-")?"Observed runtime signal "+requiredSignal+"="+observedSignal+
+              " during generated storefront traffic; retrieved runbook matches this measurement. Demo reasoning is deterministic, not an LLM diagnosis.":
+              "The synthetic telemetry matches the retrieved procedure. Demo reasoning is deterministic, not an LLM diagnosis.";
         };
         confidence=sid.startsWith("commerce-")?.84:.9;warnings.add("Demo confidence is a fixture score, not a calibrated probability.");
       }
@@ -129,7 +124,9 @@ public class AgentClient {
     UUID incident=UUID.fromString(Objects.toString(request.get("incident_id"))), approval=UUID.fromString(Objects.toString(request.get("approval_id")));
     var rows=db.queryForList("SELECT i.analysis,i.status,i.service,i.scenario_id,a.decision FROM incidents i JOIN approvals a ON a.incident_id=i.id WHERE i.id=? AND a.id=?",incident,approval);
     if(rows.isEmpty()||!"APPROVE".equals(rows.get(0).get("decision"))||!List.of("APPROVED","RESOLVED").contains(rows.get(0).get("status"))) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,"Persisted human approval required");
-    var r=rows.get(0);var a=r.get("analysis") instanceof String s?decode(s): (Map<String,Object>)r.get("analysis");var recommendation=(Map<String,Object>)a.get("recommendation");String action=Objects.toString(request.get("action"));
+    var r=rows.get(0);Object rawAnalysis=r.get("analysis");
+    var a=rawAnalysis instanceof Map<?,?> m?(Map<String,Object>)m:decode(Objects.toString(rawAnalysis));
+    var recommendation=(Map<String,Object>)a.get("recommendation");String action=Objects.toString(request.get("action"));
     if(!Objects.equals(r.get("service"),request.get("service"))||!Objects.equals(r.get("scenario_id"),request.get("scenario_id"))||!Objects.equals(recommendation.get("action"),action))throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,"Approved action context mismatch");
     var scenario=scenarios.stream().filter(s->Objects.equals(s.get("id"),request.get("scenario_id"))).findFirst().orElseThrow(()->new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,"Unknown scenario"));
     if(!Objects.equals(action,scenario.get("action")))throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,"Action outside allowlist");

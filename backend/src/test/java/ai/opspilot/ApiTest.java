@@ -40,7 +40,7 @@ class ApiTest {
                 .header("Authorization", "Bearer local-demo-token")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"service\":\"x\",\"title\":\"\",\"description\":\"x\",\"severity\":\"P0\"}"))
+                    "{\"service\":\"x\",\"title\":\"\",\"description\":\"x\",\"severity\":\"P6\"}"))
         .andExpect(status().isBadRequest());
     verifyNoInteractions(incidents);
   }

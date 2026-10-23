@@ -11,5 +11,7 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose up --build --wait --wait-timeout 300
       - run: docker compose --profile test run --build --rm tests
+      - if: failure()
+        run: docker compose logs --no-color backend commerce-controller commerce-checkout commerce-inventory commerce-storefront commerce-load-generator postgres
       - if: always()
         run: docker compose down -v

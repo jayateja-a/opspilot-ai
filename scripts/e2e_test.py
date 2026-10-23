@@ -1,12 +1,16 @@
 """Black-box regression suite against Compose API, PostgreSQL/pgvector, Spring AI demo, and lab."""
 import os, uuid
 from concurrent.futures import ThreadPoolExecutor
+import json
+from pathlib import Path
 import httpx, pytest
 
 pytestmark = pytest.mark.skipif(os.getenv("RUN_INTEGRATION") != "1", reason="Compose integration profile sets RUN_INTEGRATION=1")
 BASE=os.getenv("API_BASE","http://127.0.0.1:8080/api")
 TOKEN=os.getenv("API_TOKEN","local-demo-token")
-SCENARIOS=["db-pool","bad-release","oom","cpu","disk","redis","kafka","certificate","dns","rate-limit","commerce-db-pool","commerce-queue-backlog"]
+SCENARIO_DATA=json.loads((Path(__file__).parents[1]/"fixtures"/"incidents.json").read_text())
+SCENARIOS=[s["id"] for s in SCENARIO_DATA]
+SCENARIO_BY_ID={s["id"]:s for s in SCENARIO_DATA}
 def call(method,path,body=None,expected=200):
     r=httpx.request(method,BASE+path,headers={"Authorization":"Bearer "+TOKEN},json=body,timeout=90,trust_env=False)
     assert r.status_code==expected,f"{method} {path}: {r.status_code} {r.text}"
@@ -19,23 +23,21 @@ def create(sid="db-pool"):
 def test_itil_incident_investigation_approval_simulation_and_rca(sid):
     i=create(sid); iid=i["id"]
     assert i["status"]=="OPEN" and i["ticket_number"].startswith("INC-")
-    assert i["priority"] in ("P1","P2","P3","P4") and i["affected_ci"]==i["service"]
+    assert i["priority"] in ("P0","P1","P2","P3","P4","P5") and i["affected_ci"]==i["service"]
+    assert i["priority"]==SCENARIO_BY_ID[sid]["severity"]
     call("POST",f"/incidents/{iid}/execute",{},409)
     i=call("POST",f"/incidents/{iid}/analyze",{})
     assert i["status"]=="AWAITING_APPROVAL"
     a=i["analysis"]
-    assert a["recommendation"]["executable"] and a["recommendation"]["human_approval_required"]
-    assert any(c["runbook_id"]=="rb-"+sid for c in a["citations"])
+    assert a["recommendation"]["executable"] and a["recommendation"]["human_approval_required"], f"{sid}: recommendation={a['recommendation']}; citations={[c.get('runbook_id') for c in a['citations']]}; evidence={a['evidence']}"
+    assert any(c["runbook_id"]=="rb-"+sid for c in a["citations"]), f"{sid}: missing expected runbook in {[c.get('runbook_id') for c in a['citations']]}"
     assert len(a["evidence"])==2 and a["causal_graph"]["nodes"] and a["fix_graph"]["nodes"]
-    if sid == "commerce-db-pool":
+    if sid.startswith("commerce-"):
         observed=a["evidence"][1]["data"]
-        assert observed["database_pool_size"] > 0
-        assert observed["checkout_error_rate"] > 0 or observed["database_waiters"] > 0
-        assert "generated storefront traffic" in a["reasoning"]
-    if sid == "commerce-queue-backlog":
-        observed=a["evidence"][1]["data"]
-        assert observed["queue_backlog"] > 0
-        assert "Observed order queue backlog" in a["reasoning"]
+        required=SCENARIO_BY_ID[sid]["runtime_signal"]
+        signal_value=observed.get("queue_backlog",0) if required=="queue_backlog" else observed.get("fault_signals",{}).get(required,0)
+        assert signal_value >= SCENARIO_BY_ID[sid].get("runtime_min",1), f"{sid} signal {required}={signal_value}; metrics={observed}"
+        assert "Observed runtime signal" in a["reasoning"]
     assert i["rcaDocuments"] and i["rcaDocuments"][0]["status"]=="DRAFT"
     call("POST",f"/incidents/{iid}/analyze",{},409)
     i=call("POST",f"/incidents/{iid}/approval",{"decision":"APPROVE","reviewer":"e2e-operator","note":"Reviewed synthetic telemetry, impact, and rollback."})
@@ -61,7 +63,7 @@ def test_rejection_and_insufficient_evidence_are_non_executable():
 def test_auth_validation_config_items_and_record_not_found():
     assert httpx.get(BASE+"/incidents",trust_env=False).status_code==401
     assert {x["domain"] for x in call("GET","/configuration-items")}=={"FINTECH","HEALTHCARE"}
-    call("POST","/incidents",{"service":"payment-service","title":"","description":"x","severity":"P0"},400)
+    call("POST","/incidents",{"service":"payment-service","title":"","description":"x","severity":"P6"},400)
     call("POST","/incidents",{"service":"wrong","title":"x","description":"x","severity":"P1","scenarioId":"db-pool"},400)
     call("GET","/incidents/"+str(uuid.uuid4()),expected=404)
 
@@ -69,6 +71,10 @@ def test_priority_is_derived_from_impact_and_urgency():
     i=call("POST","/incidents",{"service":"payment-service","title":"Broad outage","description":"Many users cannot complete payments","severity":"P3","impact":"HIGH","urgency":"HIGH","category":"AVAILABILITY","reportedBy":"synthetic-monitor","sourceChannel":"MONITORING"},201)
     assert i["priority"]=="P1" and i["major_incident"] is True
     assert i["category"]=="AVAILABILITY" and i["reported_by"]=="synthetic-monitor" and i["source_channel"]=="MONITORING"
+    emergency=call("POST","/incidents",{"service":"payment-service","title":"Emergency outage","description":"Critical payment platform outage","severity":"P0"},201)
+    routine=call("POST","/incidents",{"service":"catalog-service","title":"Minor catalog display issue","description":"Cosmetic label issue","severity":"P5"},201)
+    assert emergency["priority"]=="P0" and emergency["major_incident"] is True
+    assert routine["priority"]=="P5" and routine["major_incident"] is False
 
 def test_concurrent_execute_has_exactly_one_audit_receipt():
     i=create("cpu");iid=i["id"]

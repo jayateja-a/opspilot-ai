@@ -9,7 +9,7 @@ All `/api/*` routes require `Authorization: Bearer <API_TOKEN>`. The local front
 | POST | `/api/incidents/{id}/analyze` | Collect lab telemetry, retrieve runbooks, propose diagnosis and RCA |
 | POST | `/api/incidents/{id}/approval` | Persist `APPROVE` or `REJECT` with reviewer and note |
 | POST | `/api/incidents/{id}/execute` | Run allowlisted simulation only after persisted approval; idempotent after resolution |
-| GET | `/api/scenarios` | Twelve synthetic scenario summaries |
+| GET | `/api/scenarios` | 82 labeled incident scenarios, including priorities P0-P5 |
 | GET/POST | `/api/runbooks` | List and ingest custom runbook content for retrieval |
 | GET | `/api/configuration-items` | Local fintech and healthcare CI inventory |
 | GET/POST | `/api/problems` | List and create Problem records; optional linked incident |
@@ -20,7 +20,7 @@ All `/api/*` routes require `Authorization: Bearer <API_TOKEN>`. The local front
 | GET | `/actuator/health` | Backend health |
 | GET | `/v3/api-docs` | Generated OpenAPI document |
 
-Incident creation accepts service/title/description/severity (`P1`/`P2`/`P3`) and optional `scenarioId`. The response includes `INC-` ticket number, impact, urgency, priority, category, affected CI, and major-incident flag. Investigation returns observed `evidence`, retrieved `citations`, a root-cause hypothesis, recommendation, `causal_graph`, `fix_graph`, and resolution classification. In demo mode the diagnosis and token-hash embeddings are deterministic. Provider mode validates model evidence and runbook citations before returning a supported proposal.
+Incident creation accepts service/title/description/severity (`P0`-`P5`) and optional `scenarioId`. P0 is an explicit local emergency priority; P1-P5 are derived from impact and urgency. The response includes `INC-` ticket number, impact, urgency, priority, category, affected CI, and major-incident flag. Investigation returns observed `evidence`, retrieved `citations`, a root-cause hypothesis, recommendation, `causal_graph`, `fix_graph`, and resolution classification. In demo mode the diagnosis and token-hash embeddings are deterministic. Provider mode validates model evidence and runbook citations before returning a supported proposal.
 
 Execution results are labeled simulated and include before/after metric snapshots and a stable receipt. RCA promotion copies the reviewed summary into the runbook retrieval library; it does not train the model.
 

@@ -83,7 +83,7 @@
     "id": "rb-commerce-db-pool",
     "service": "checkout-service",
     "title": "Diagnose checkout database pool saturation",
-    "content": "E-commerce checkout connection pool exhaustion under generated traffic. Evidence: measured database active connections approach pool size, waiters increase, checkout connection acquisition timeouts appear in service logs, and checkout latency or error rate rises. Confirm the checkout database pool budget against PostgreSQL capacity and inspect query duration before increasing the limit. Reduce connection hold time or tune the bounded pool only after validating database headroom. Verify waiters and checkout errors fall. Roll back the pool setting if database saturation worsens.",
+    "content": "E-commerce checkout connection pool exhaustion under generated traffic. Evidence: measured database active connections approach pool size, waiters increase, checkout connection acquisition timeouts appear in service logs, and checkout latency or error rate rises. Confirm the checkout database pool budget against PostgreSQL capacity and inspect query duration before increasing the limit. Reduce connection hold time or tune the bounded pool only after validating database headroom. Verify waiters and checkout errors fall. Roll back the pool setting if database saturation worsens. Runtime evidence required: checkout.db_pool_timeouts must be non-zero during generated traffic.",
     "action": "tune_pool",
     "risk": "MEDIUM"
   },
@@ -91,8 +91,88 @@
     "id": "rb-commerce-queue-backlog",
     "service": "checkout-service",
     "title": "Diagnose order worker backlog",
-    "content": "E-commerce order queue backlog under generated storefront traffic. Evidence: measured pending order queue grows while processed order count stalls and storefront requests continue. Check worker health and downstream inventory latency. Restore worker availability or add bounded consumer capacity after checking idempotency and downstream limits. Verify backlog drains and order completion catches up. Roll back added consumers if downstream saturation increases.",
+    "content": "E-commerce order queue backlog under generated storefront traffic. Evidence: measured pending order queue grows while processed order count stalls and storefront requests continue. Check worker health and downstream inventory latency. Restore worker availability or add bounded consumer capacity after checking idempotency and downstream limits. Verify backlog drains and order completion catches up. Roll back added consumers if downstream saturation increases. Runtime evidence required: queue_backlog must grow while generated orders are pending.",
     "action": "scale_consumers",
     "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-inventory-latency",
+    "service": "checkout-service",
+    "title": "Inventory dependency latency",
+    "content": "Inventory dependency latency. Runtime evidence to inspect: measured inventory and checkout latency, request volume, and dependency timing. Expected failure mechanism: Inventory reservation latency increases and propagates to checkout response time. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "enable_backoff",
+    "risk": "LOW"
+  },
+  {
+    "id": "rb-commerce-inventory-unavailable",
+    "service": "checkout-service",
+    "title": "Inventory dependency outage",
+    "content": "Inventory dependency outage. Runtime evidence to inspect: inventory dependency errors, checkout failures, and service health. Expected failure mechanism: Inventory returns service errors and checkout cannot reserve stock. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "reconnect_cache",
+    "risk": "HIGH"
+  },
+  {
+    "id": "rb-commerce-release-regression",
+    "service": "checkout-service",
+    "title": "Checkout release regression",
+    "content": "Checkout release regression. Runtime evidence to inspect: checkout 5xx rate, generated request count, and release-associated logs. Expected failure mechanism: A synthetic checkout release introduces server errors on incoming order requests. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "rollback_deployment",
+    "risk": "HIGH"
+  },
+  {
+    "id": "rb-commerce-rate-limit",
+    "service": "checkout-service",
+    "title": "Checkout rate limiting",
+    "content": "Checkout rate limiting. Runtime evidence to inspect: 429 count, request rate, and retry-after response evidence. Expected failure mechanism: Checkout rate limits repeated synthetic requests and returns throttling responses. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "enable_backoff",
+    "risk": "LOW"
+  },
+  {
+    "id": "rb-commerce-cpu-contention",
+    "service": "checkout-service",
+    "title": "Checkout CPU contention",
+    "content": "Checkout CPU contention. Runtime evidence to inspect: contention request count, checkout latency, traffic level, and errors. Expected failure mechanism: CPU work in checkout increases request latency under generated shoppers. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "scale_deployment",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-cache-outage",
+    "service": "checkout-service",
+    "title": "Session cache outage",
+    "content": "Session cache outage. Runtime evidence to inspect: cache failure events, checkout errors, and request volume. Expected failure mechanism: Checkout cannot read its synthetic session cache and rejects requests. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "reconnect_cache",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-retry-storm",
+    "service": "checkout-service",
+    "title": "Retry amplification against inventory",
+    "content": "Retry amplification against inventory. Runtime evidence to inspect: retry storm count, inventory attempt count, dependency errors, and checkout failures. Expected failure mechanism: Checkout retries failed inventory calls repeatedly, multiplying downstream request volume. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "enable_backoff",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-circuit-breaker",
+    "service": "checkout-service",
+    "title": "Checkout circuit breaker stuck open",
+    "content": "Checkout circuit breaker stuck open. Runtime evidence to inspect: circuit rejection count, dependency request count, and checkout errors. Expected failure mechanism: An open checkout circuit breaker rejects requests before calling healthy inventory. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "reconnect_cache",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-inventory-drift",
+    "service": "checkout-service",
+    "title": "Inventory availability data inconsistency",
+    "content": "Inventory availability data inconsistency. Runtime evidence to inspect: inventory drift events, rejected orders, and inventory response evidence. Expected failure mechanism: Inventory reports conflicting stock availability and checkout rejects the affected orders. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "rollback_deployment",
+    "risk": "MEDIUM"
+  },
+  {
+    "id": "rb-commerce-certificate-expired",
+    "service": "checkout-service",
+    "title": "Expired internal service certificate",
+    "content": "Expired internal service certificate. Runtime evidence to inspect: TLS failure count, dependency requests, and certificate failure logs. Expected failure mechanism: An expired synthetic certificate blocks secure checkout-to-dependency communication. Restore service only after validating the observed signals, customer impact, and downstream capacity. Use bounded changes, verify recovery from live metrics and logs, and document rollback criteria. Do not trust the scenario label without matching measured telemetry.",
+    "action": "renew_certificate",
+    "risk": "HIGH"
   }
 ]
