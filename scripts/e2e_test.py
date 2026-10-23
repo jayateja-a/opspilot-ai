@@ -30,7 +30,8 @@ def test_itil_incident_investigation_approval_simulation_and_rca(sid):
     assert i["status"]=="AWAITING_APPROVAL"
     a=i["analysis"]
     assert a["recommendation"]["executable"] and a["recommendation"]["human_approval_required"], f"{sid}: recommendation={a['recommendation']}; citations={[c.get('runbook_id') for c in a['citations']]}; evidence={a['evidence']}"
-    assert any(c["runbook_id"]=="rb-"+sid for c in a["citations"]), f"{sid}: missing expected runbook in {[c.get('runbook_id') for c in a['citations']]}"
+    expected_runbook=SCENARIO_BY_ID[sid]["expected_runbook"]
+    assert any(c["runbook_id"]==expected_runbook for c in a["citations"]), f"{sid}: missing expected runbook {expected_runbook} in {[c.get('runbook_id') for c in a['citations']]}"
     assert len(a["evidence"])==2 and a["causal_graph"]["nodes"] and a["fix_graph"]["nodes"]
     if sid.startswith("commerce-"):
         observed=a["evidence"][1]["data"]

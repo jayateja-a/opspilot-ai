@@ -38,7 +38,7 @@ class LabClientTest {
       String url = "http://127.0.0.1:" + server.getAddress().getPort();
       LabClient client = new LabClient(url, url, url, "test-token", new ObjectMapper());
 
-      client.activateAndRead("db-pool","payment-service");
+      client.activateAndRead("db-pool");
 
       assertEquals("{\"scenario_id\":\"db-pool\"}", body.get());
       assertEquals(Integer.toString(body.get().getBytes(StandardCharsets.UTF_8).length), contentLength.get());
@@ -56,7 +56,7 @@ class LabClientTest {
     fintech.start();healthcare.start();commerce.start();
     try {
       LabClient client=new LabClient(url(fintech),url(healthcare),url(commerce),"test-token",new ObjectMapper());
-      var telemetry=client.activateAndRead("imported-checkout-ticket","checkout-service");
+      var telemetry=client.activateAndRead("commerce-imported-ticket");
       assertEquals("ecommerce",telemetry.get("domain"));
       assertTrue(commerceRequests.get()>=2,"expected fault activation and telemetry to use commerce controller");
       assertEquals(0,fintechRequests.get());
